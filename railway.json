@@ -5,8 +5,6 @@
     "buildCommand": "go build -o app"
   },
   "deploy": {
-    "startCommand": "./app",
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 5
+    "startCommand": "./app"
   }
 }
