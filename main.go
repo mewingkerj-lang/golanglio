@@ -537,6 +537,152 @@ func logAction(username, action string) {
 		uid, action, time.Now().Format("2006-01-02 15:04:05"))
 }
 
+// ─── Set Gun ──────────────────────────────────────────────────────────────────
+
+// SAMP weapon IDs 23-31 mapping
+var weaponNames = map[int]string{
+	23: "Silenced Pistol",
+	24: "Desert Eagle",
+	25: "Shotgun",
+	26: "Sawnoff Shotgun",
+	27: "Combat Shotgun",
+	28: "Micro SMG / Uzi",
+	29: "MP5",
+	30: "AK-47",
+	31: "M4",
+}
+
+func handleSetGun(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+		GunID    int    `json:"gun_id"`
+		Ammo     int    `json:"ammo"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	// Validate gun id
+	gunName, ok := weaponNames[req.GunID]
+	if !ok {
+		jsonResp(w, 400, map[string]string{"error": "gun ID tidak valid, hanya ID 23-31 yang diizinkan"})
+		return
+	}
+
+	// Validate ammo
+	if req.Ammo < 0 || req.Ammo > 1000 {
+		jsonResp(w, 400, map[string]string{"error": "ammo harus antara 0-1000"})
+		return
+	}
+
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	// Check user exists
+	var pName string
+	if err := db.QueryRow("SELECT pName FROM accounts WHERE pName=?", req.Username).Scan(&pName); err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "user tidak ditemukan"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "db error: " + err.Error()})
+		return
+	}
+
+	// Read current pGun and pAmmo
+	var pGunStr, pAmmoStr string
+	if err := db.QueryRow("SELECT pGun, pAmmo FROM accounts WHERE pName=?", req.Username).Scan(&pGunStr, &pAmmoStr); err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal baca data senjata: " + err.Error()})
+		return
+	}
+
+	// Parse comma-separated strings into slices of 13
+	parseSlot := func(s string) []string {
+		parts := strings.Split(s, ",")
+		for len(parts) < 13 {
+			parts = append(parts, "0")
+		}
+		return parts[:13]
+	}
+	guns := parseSlot(pGunStr)
+	ammos := parseSlot(pAmmoStr)
+
+	// Find slot: first check if gunID already exists in a slot (update that slot)
+	// Otherwise find first empty slot (value == "0")
+	slotIndex := -1
+	for i, g := range guns {
+		if strings.TrimSpace(g) == fmt.Sprintf("%d", req.GunID) {
+			slotIndex = i
+			break
+		}
+	}
+	if slotIndex == -1 {
+		// Find first empty slot
+		for i, g := range guns {
+			if strings.TrimSpace(g) == "0" {
+				slotIndex = i
+				break
+			}
+		}
+	}
+	if slotIndex == -1 {
+		jsonResp(w, 400, map[string]string{"error": "semua slot senjata sudah penuh (13 slot)"})
+		return
+	}
+
+	// Set the gun and ammo at the found slot
+	guns[slotIndex] = fmt.Sprintf("%d", req.GunID)
+	ammos[slotIndex] = fmt.Sprintf("%d", req.Ammo)
+
+	newGun := strings.Join(guns, ",")
+	newAmmo := strings.Join(ammos, ",")
+
+	_, err := db.Exec("UPDATE accounts SET pGun=?, pAmmo=? WHERE pName=?", newGun, newAmmo, req.Username)
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal update: " + err.Error()})
+		return
+	}
+
+	s, _ := getSession(r)
+	logAction(s.Username, fmt.Sprintf("Set gun %s (ID:%d) ammo:%d untuk %s di slot %d", gunName, req.GunID, req.Ammo, req.Username, slotIndex))
+
+	jsonResp(w, 200, map[string]any{
+		"status":    "updated",
+		"slot":      slotIndex,
+		"gun_name":  gunName,
+		"pGun":      newGun,
+		"pAmmo":     newAmmo,
+	})
+}
+
+func handleGetGunSlots(w http.ResponseWriter, r *http.Request) {
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		jsonResp(w, 400, map[string]string{"error": "username required"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+	var pGun, pAmmo string
+	err := db.QueryRow("SELECT pGun, pAmmo FROM accounts WHERE pName=?", username).Scan(&pGun, &pAmmo)
+	if err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "user tidak ditemukan"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	jsonResp(w, 200, map[string]string{"pGun": pGun, "pAmmo": pAmmo})
+}
+
 // ─── HTML Page ────────────────────────────────────────────────────────────────
 
 const htmlPage = `<!DOCTYPE html>
@@ -1066,9 +1212,46 @@ tbody tr:hover{background:var(--surface2)}
             </div>
           </div>
         </div>
+        
+        <!-- Set Gun -->
+        <div class="card">
+          <div class="card-title">&#128299; Set Senjata Pemain</div>
+          <div class="gun-preview-wrap" id="gun-preview-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px">
+            <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:600">Preview Slot Senjata</div>
+            <div id="gun-slot-preview" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+          </div>
+          <div class="input-row">
+            <div class="form-group">
+              <label>Username</label>
+              <input type="text" id="gun-user" placeholder="Username..." oninput="clearGunPreview()"/>
+            </div>
+            <div class="form-group">
+              <label>ID Senjata (23-31)</label>
+              <select id="gun-id" onchange="updateGunLabel()">
+                <option value="23">23 — Silenced Pistol</option>
+                <option value="24">24 — Desert Eagle</option>
+                <option value="25">25 — Shotgun</option>
+                <option value="26">26 — Sawnoff Shotgun</option>
+                <option value="27">27 — Combat Shotgun</option>
+                <option value="28">28 — Micro SMG / Uzi</option>
+                <option value="29">29 — MP5</option>
+                <option value="30">30 — AK-47</option>
+                <option value="31">31 — M4</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Ammo (max 1000)</label>
+              <input type="number" id="gun-ammo" placeholder="0" min="0" max="1000"/>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="setGun()" style="flex-shrink:0;margin-bottom:0">SET</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px;margin-bottom:4px">
+            <button class="btn btn-copy btn-sm" onclick="previewGunSlots()">&#128270; Lihat Slot</button>
+          </div>
+          <div class="error-msg" id="gun-err"></div>
+          <div class="success-msg" id="gun-ok"></div>
+        </div>
       </div>
-
-      <!-- Admin Log Page -->
       <div class="page" id="page-adminlog">
         <div class="page-title">📋 Admin Log</div>
         <div class="page-sub">Riwayat kegiatan admin di server Dewata Nation RP.</div>
@@ -1408,6 +1591,81 @@ async function setProp(type, userEl, valEl, okEl, errEl) {
   } catch { document.getElementById(errEl).textContent='Koneksi error'; document.getElementById(errEl).classList.add('show'); }
 }
 
+// ─── Set Gun ──────────────────────────────────────────────────────────────────
+var gunNames = {
+  23:'Silenced Pistol', 24:'Desert Eagle', 25:'Shotgun',
+  26:'Sawnoff Shotgun', 27:'Combat Shotgun', 28:'Micro SMG / Uzi',
+  29:'MP5', 30:'AK-47', 31:'M4'
+};
+
+function clearGunPreview() {
+  document.getElementById('gun-preview-wrap').style.display = 'none';
+  resetMsg('gun-err','gun-ok');
+}
+
+function updateGunLabel() {
+  // Nothing special needed, select already shows name
+}
+
+async function previewGunSlots() {
+  var user = document.getElementById('gun-user').value.trim();
+  resetMsg('gun-err','gun-ok');
+  if (!user) { showMsg('gun-err', 'Username wajib diisi untuk melihat slot'); return; }
+  try {
+    var r = await fetch('/api/get-gun-slots?username='+encodeURIComponent(user));
+    var d = await r.json();
+    if (!r.ok) { showMsg('gun-err', d.error || 'Gagal memuat slot'); return; }
+    var wrap = document.getElementById('gun-preview-wrap');
+    var preview = document.getElementById('gun-slot-preview');
+    var guns = d.pGun.split(',');
+    var ammos = d.pAmmo.split(',');
+    var html = '';
+    for (var i = 0; i < 13; i++) {
+      var gid = parseInt(guns[i]) || 0;
+      var am = parseInt(ammos[i]) || 0;
+      if (gid === 0) {
+        html += '<div style="background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--textmuted);min-width:80px;text-align:center">'+
+          '<div style="font-weight:700;margin-bottom:2px">Slot '+(i+1)+'</div>'+
+          '<div>Kosong</div></div>';
+      } else {
+        var name = gunNames[gid] || ('ID '+gid);
+        html += '<div style="background:rgba(232,160,32,0.1);border:1px solid rgba(232,160,32,0.3);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--accent);min-width:80px;text-align:center">'+
+          '<div style="font-weight:700;margin-bottom:2px">Slot '+(i+1)+'</div>'+
+          '<div style="color:var(--text);font-size:12px;font-weight:600">'+escHtml(name)+'</div>'+
+          '<div style="color:var(--textmuted)">'+am+' peluru</div></div>';
+      }
+    }
+    preview.innerHTML = html;
+    wrap.style.display = 'block';
+  } catch(e) { showMsg('gun-err', 'Koneksi error'); }
+}
+
+async function setGun() {
+  var user = document.getElementById('gun-user').value.trim();
+  var gunId = parseInt(document.getElementById('gun-id').value);
+  var ammo = parseInt(document.getElementById('gun-ammo').value);
+  resetMsg('gun-err','gun-ok');
+  if (!user) { showMsg('gun-err', 'Username wajib diisi'); return; }
+  if (isNaN(ammo) || ammo < 0) { showMsg('gun-err', 'Ammo tidak valid'); return; }
+  if (ammo > 1000) { showMsg('gun-err', 'Ammo maksimal 1000'); return; }
+  try {
+    var r = await fetch('/api/set/gun', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:user, gun_id:gunId, ammo:ammo})
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('gun-err', d.error || 'Gagal set senjata'); return; }
+    var msg = 'Berhasil set '+d.gun_name+' (ID:'+gunId+') ammo:'+ammo+' untuk '+user+' di Slot '+(d.slot+1);
+    showMsg('gun-ok', msg);
+    showToast('Senjata berhasil diset!', 'success');
+    // Auto-refresh preview if visible
+    if (document.getElementById('gun-preview-wrap').style.display !== 'none') {
+      previewGunSlots();
+    }
+  } catch(e) { showMsg('gun-err', 'Koneksi error'); }
+}
+
 // ─── Admin Log ────────────────────────────────────────────────────────────────
 async function loadAdminLog() {
   var el = document.getElementById('log-list');
@@ -1739,6 +1997,8 @@ func main() {
 	mux.HandleFunc("/api/set/item", authMiddleware(handleSetItem))
 	mux.HandleFunc("/api/set/account", authMiddleware(handleSetAccount))
 	mux.HandleFunc("/api/set/property", authMiddleware(handleSetProperty))
+	mux.HandleFunc("/api/set/gun", authMiddleware(handleSetGun))
+	mux.HandleFunc("/api/get-gun-slots", authMiddleware(handleGetGunSlots))
 	mux.HandleFunc("/api/admin-log", authMiddleware(handleAdminLog))
 	mux.HandleFunc("/api/backup/export", authMiddleware(handleBackupExport))
 
