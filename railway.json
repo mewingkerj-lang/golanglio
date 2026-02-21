@@ -2,7 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "go build -o app"
+    "buildCommand": "go mod tidy && go build -o app"
   },
   "deploy": {
     "startCommand": "./app"
