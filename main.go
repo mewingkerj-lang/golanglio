@@ -683,6 +683,178 @@ func handleGetGunSlots(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, map[string]string{"pGun": pGun, "pAmmo": pAmmo})
 }
 
+// ─── Set Vehicle ──────────────────────────────────────────────────────────────
+
+var vehicleNames = map[int]string{
+	400: "Landstalker", 401: "Bravura", 402: "Buffalo", 403: "Linerunner",
+	404: "Pereniel", 405: "Sentinel", 406: "Dumper", 407: "Firetruck",
+	408: "Trashmaster", 409: "Stretch", 410: "Manana", 411: "Infernus",
+	412: "Voodoo", 413: "Pony", 414: "Mule", 415: "Cheetah",
+	416: "Ambulance", 417: "Leviathan", 418: "Moonbeam", 419: "Esperanto",
+	420: "Taxi", 421: "Washington", 422: "Bobcat", 423: "Mr Whoopee",
+	424: "BF Injection", 425: "Hunter", 426: "Premier", 427: "Enforcer",
+	428: "Securicar", 429: "Banshee", 430: "Predator", 431: "Bus",
+	432: "Rhino", 433: "Barracks", 434: "Hotknife", 435: "Trailer",
+	436: "Previon", 437: "Coach", 438: "Cabbie", 439: "Stallion",
+	440: "Rumpo", 441: "RC Bandit", 442: "Romero", 443: "Packer",
+	444: "Monster", 445: "Admiral", 446: "Squalo", 447: "Seasparrow",
+	448: "Pizzaboy", 449: "Tram", 450: "Trailer 2", 451: "Turismo",
+	452: "Speeder", 453: "Reefer", 454: "Tropic", 455: "Flatbed",
+	456: "Yankee", 457: "Caddy", 458: "Solair", 459: "Berkley's RC Van",
+	460: "Skimmer", 461: "PCJ-600", 462: "Faggio", 463: "Freeway",
+	464: "RC Baron", 465: "RC Raider", 466: "Glendale", 467: "Oceanic",
+	468: "Sanchez", 469: "Sparrow", 470: "Patriot", 471: "Quad",
+	472: "Coastguard", 473: "Dinghy", 474: "Hermes", 475: "Sabre",
+	476: "Rustler", 477: "ZR-350", 478: "Walton", 479: "Regina",
+	480: "Comet", 481: "BMX", 482: "Burrito", 483: "Camper",
+	484: "Marquis", 485: "Baggage", 486: "Dozer", 487: "Maverick",
+	488: "News Chopper", 489: "Rancher", 490: "FBI Rancher", 491: "Virgo",
+	492: "Greenwood", 493: "Jetmax", 494: "Hotring", 495: "Sandking",
+	496: "Blista Compact", 497: "Police Maverick", 498: "Boxville",
+	499: "Benson", 500: "Mesa", 501: "RC Goblin", 502: "Hotring Racer A",
+	503: "Hotring Racer B", 504: "Bloodring Banger", 505: "Rancher",
+	506: "Super GT", 507: "Elegant", 508: "Journey", 509: "Bike",
+	510: "Mountain Bike", 511: "Beagle", 512: "Cropduster", 513: "Stuntplane",
+	514: "Tanker", 515: "Roadtrain", 516: "Nebula", 517: "Majestic",
+	518: "Buccaneer", 519: "Shamal", 520: "Hydra", 521: "FCR-900",
+	522: "NRG-500", 523: "HPV1000", 524: "Cement Truck", 525: "Tow Truck",
+	526: "Fortune", 527: "Cadrona", 528: "FBI Truck", 529: "Willard",
+	530: "Forklift", 531: "Tractor", 532: "Combine", 533: "Feltzer",
+	534: "Remington", 535: "Slamvan", 536: "Blade", 537: "Freight",
+	538: "Streak", 539: "Vortex", 540: "Vincent", 541: "Bullet",
+	542: "Clover", 543: "Sadler", 544: "Firetruck LA", 545: "Hustler",
+	546: "Intruder", 547: "Primo", 548: "Cargobob", 549: "Tampa",
+	550: "Sunrise", 551: "Merit", 552: "Utility", 553: "Nevada",
+	554: "Yosemite", 555: "Windsor", 556: "Monster A", 557: "Monster B",
+	558: "Uranus", 559: "Jester", 560: "Sultan", 561: "Stratum",
+	562: "Elegy", 563: "Raindance", 564: "RC Tiger", 565: "Flash",
+	566: "Tahoma", 567: "Savanna", 568: "Bandito", 569: "Freight Flat",
+	570: "Streak Carriage", 571: "Kart", 572: "Mower", 573: "Dune",
+	574: "Sweeper", 575: "Broadway", 576: "Tornado", 577: "AT-400",
+	578: "DFT-30", 579: "Huntley", 580: "Stafford", 581: "BF-400",
+	582: "Newsvan", 583: "Tug", 584: "Trailer 3", 585: "Emperor",
+	586: "Wayfarer", 587: "Euros", 588: "Hotdog", 589: "Club",
+	590: "Freight Box", 591: "Trailer 4", 592: "Andromada", 593: "Dodo",
+	594: "RC Cam", 595: "Launch", 596: "Police Car LSPD",
+	597: "Police Car SFPD", 598: "Police Car LVPD", 599: "Police Ranger",
+	600: "Picador", 601: "S.W.A.T.", 602: "Alpha", 603: "Phoenix",
+	604: "Glendale Shit", 605: "Sadler Shit", 606: "Baggage Trailer A",
+	607: "Baggage Trailer B", 608: "Tug Stairs Trailer", 609: "Boxville",
+	610: "Farm Plow", 611: "Utility Trailer",
+}
+
+func handleSetVeh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+		VehID    int    `json:"veh_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	vehName, ok := vehicleNames[req.VehID]
+	if !ok {
+		jsonResp(w, 400, map[string]string{"error": "vehicle ID tidak valid (400-611)"})
+		return
+	}
+
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	var pName string
+	if err := db.QueryRow("SELECT pName FROM accounts WHERE pName=?", req.Username).Scan(&pName); err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "user tidak ditemukan"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "db error: " + err.Error()})
+		return
+	}
+
+	var cModelStr string
+	if err := db.QueryRow("SELECT cModel FROM accounts WHERE pName=?", req.Username).Scan(&cModelStr); err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal baca data kendaraan: " + err.Error()})
+		return
+	}
+
+	// Parse 5-slot comma-separated string
+	parts := strings.Split(cModelStr, ",")
+	for len(parts) < 5 {
+		parts = append(parts, "0")
+	}
+	slots := parts[:5]
+
+	// Check if vehicle already in a slot → update that slot
+	slotIndex := -1
+	for i, v := range slots {
+		if strings.TrimSpace(v) == fmt.Sprintf("%d", req.VehID) {
+			slotIndex = i
+			break
+		}
+	}
+	// Otherwise find first empty slot
+	if slotIndex == -1 {
+		for i, v := range slots {
+			if strings.TrimSpace(v) == "0" {
+				slotIndex = i
+				break
+			}
+		}
+	}
+	if slotIndex == -1 {
+		jsonResp(w, 400, map[string]string{"error": "semua slot kendaraan sudah penuh (5 slot)"})
+		return
+	}
+
+	slots[slotIndex] = fmt.Sprintf("%d", req.VehID)
+	newCModel := strings.Join(slots, ",")
+
+	if _, err := db.Exec("UPDATE accounts SET cModel=? WHERE pName=?", newCModel, req.Username); err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal update: " + err.Error()})
+		return
+	}
+
+	s, _ := getSession(r)
+	logAction(s.Username, fmt.Sprintf("Set kendaraan %s (ID:%d) untuk %s di slot %d", vehName, req.VehID, req.Username, slotIndex))
+
+	jsonResp(w, 200, map[string]any{
+		"status":   "updated",
+		"slot":     slotIndex,
+		"veh_name": vehName,
+		"cModel":   newCModel,
+	})
+}
+
+func handleGetVehSlots(w http.ResponseWriter, r *http.Request) {
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		jsonResp(w, 400, map[string]string{"error": "username required"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+	var cModel string
+	err := db.QueryRow("SELECT cModel FROM accounts WHERE pName=?", username).Scan(&cModel)
+	if err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "user tidak ditemukan"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	jsonResp(w, 200, map[string]string{"cModel": cModel})
+}
+
+
+
 // ─── HTML Page ────────────────────────────────────────────────────────────────
 
 const htmlPage = `<!DOCTYPE html>
@@ -1251,6 +1423,182 @@ tbody tr:hover{background:var(--surface2)}
           <div class="error-msg" id="gun-err"></div>
           <div class="success-msg" id="gun-ok"></div>
         </div>
+
+        <!-- Set Vehicle -->
+        <div class="card">
+          <div class="card-title">&#128663; Set Kendaraan Pemain</div>
+          <div id="veh-preview-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px">
+            <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:600">Preview Slot Kendaraan</div>
+            <div id="veh-slot-preview" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+          </div>
+          <div class="input-row">
+            <div class="form-group">
+              <label>Username</label>
+              <input type="text" id="veh-user" placeholder="Username..." oninput="clearVehPreview()"/>
+            </div>
+            <div class="form-group" style="flex:2">
+              <label>Kendaraan</label>
+              <select id="veh-id" style="width:100%">
+                <option value="400">400 — Landstalker</option>
+                <option value="401">401 — Bravura</option>
+                <option value="402">402 — Buffalo</option>
+                <option value="403">403 — Linerunner</option>
+                <option value="404">404 — Pereniel</option>
+                <option value="405">405 — Sentinel</option>
+                <option value="406">406 — Dumper</option>
+                <option value="407">407 — Firetruck</option>
+                <option value="408">408 — Trashmaster</option>
+                <option value="409">409 — Stretch</option>
+                <option value="410">410 — Manana</option>
+                <option value="411">411 — Infernus</option>
+                <option value="412">412 — Voodoo</option>
+                <option value="413">413 — Pony</option>
+                <option value="414">414 — Mule</option>
+                <option value="415">415 — Cheetah</option>
+                <option value="416">416 — Ambulance</option>
+                <option value="417">417 — Leviathan</option>
+                <option value="418">418 — Moonbeam</option>
+                <option value="419">419 — Esperanto</option>
+                <option value="420">420 — Taxi</option>
+                <option value="421">421 — Washington</option>
+                <option value="422">422 — Bobcat</option>
+                <option value="423">423 — Mr Whoopee</option>
+                <option value="424">424 — BF Injection</option>
+                <option value="425">425 — Hunter</option>
+                <option value="426">426 — Premier</option>
+                <option value="427">427 — Enforcer</option>
+                <option value="428">428 — Securicar</option>
+                <option value="429">429 — Banshee</option>
+                <option value="430">430 — Predator</option>
+                <option value="431">431 — Bus</option>
+                <option value="432">432 — Rhino</option>
+                <option value="433">433 — Barracks</option>
+                <option value="434">434 — Hotknife</option>
+                <option value="436">436 — Previon</option>
+                <option value="437">437 — Coach</option>
+                <option value="438">438 — Cabbie</option>
+                <option value="439">439 — Stallion</option>
+                <option value="440">440 — Rumpo</option>
+                <option value="442">442 — Romero</option>
+                <option value="443">443 — Packer</option>
+                <option value="444">444 — Monster</option>
+                <option value="445">445 — Admiral</option>
+                <option value="446">446 — Squalo</option>
+                <option value="447">447 — Seasparrow</option>
+                <option value="448">448 — Pizzaboy</option>
+                <option value="451">451 — Turismo</option>
+                <option value="452">452 — Speeder</option>
+                <option value="453">453 — Reefer</option>
+                <option value="454">454 — Tropic</option>
+                <option value="455">455 — Flatbed</option>
+                <option value="456">456 — Yankee</option>
+                <option value="457">457 — Caddy</option>
+                <option value="458">458 — Solair</option>
+                <option value="460">460 — Skimmer</option>
+                <option value="461">461 — PCJ-600</option>
+                <option value="462">462 — Faggio</option>
+                <option value="463">463 — Freeway</option>
+                <option value="466">466 — Glendale</option>
+                <option value="467">467 — Oceanic</option>
+                <option value="468">468 — Sanchez</option>
+                <option value="469">469 — Sparrow</option>
+                <option value="470">470 — Patriot</option>
+                <option value="471">471 — Quad</option>
+                <option value="474">474 — Hermes</option>
+                <option value="475">475 — Sabre</option>
+                <option value="476">476 — Rustler</option>
+                <option value="477">477 — ZR-350</option>
+                <option value="478">478 — Walton</option>
+                <option value="479">479 — Regina</option>
+                <option value="480">480 — Comet</option>
+                <option value="481">481 — BMX</option>
+                <option value="482">482 — Burrito</option>
+                <option value="483">483 — Camper</option>
+                <option value="484">484 — Marquis</option>
+                <option value="487">487 — Maverick</option>
+                <option value="489">489 — Rancher</option>
+                <option value="490">490 — FBI Rancher</option>
+                <option value="491">491 — Virgo</option>
+                <option value="492">492 — Greenwood</option>
+                <option value="493">493 — Jetmax</option>
+                <option value="494">494 — Hotring</option>
+                <option value="495">495 — Sandking</option>
+                <option value="496">496 — Blista Compact</option>
+                <option value="498">498 — Boxville</option>
+                <option value="499">499 — Benson</option>
+                <option value="500">500 — Mesa</option>
+                <option value="502">502 — Hotring Racer A</option>
+                <option value="503">503 — Hotring Racer B</option>
+                <option value="506">506 — Super GT</option>
+                <option value="507">507 — Elegant</option>
+                <option value="508">508 — Journey</option>
+                <option value="510">510 — Mountain Bike</option>
+                <option value="511">511 — Beagle</option>
+                <option value="512">512 — Cropduster</option>
+                <option value="513">513 — Stuntplane</option>
+                <option value="516">516 — Nebula</option>
+                <option value="517">517 — Majestic</option>
+                <option value="518">518 — Buccaneer</option>
+                <option value="519">519 — Shamal</option>
+                <option value="520">520 — Hydra</option>
+                <option value="521">521 — FCR-900</option>
+                <option value="522">522 — NRG-500</option>
+                <option value="523">523 — HPV1000</option>
+                <option value="526">526 — Fortune</option>
+                <option value="527">527 — Cadrona</option>
+                <option value="529">529 — Willard</option>
+                <option value="533">533 — Feltzer</option>
+                <option value="534">534 — Remington</option>
+                <option value="535">535 — Slamvan</option>
+                <option value="536">536 — Blade</option>
+                <option value="540">540 — Vincent</option>
+                <option value="541">541 — Bullet</option>
+                <option value="542">542 — Clover</option>
+                <option value="543">543 — Sadler</option>
+                <option value="545">545 — Hustler</option>
+                <option value="546">546 — Intruder</option>
+                <option value="547">547 — Primo</option>
+                <option value="549">549 — Tampa</option>
+                <option value="550">550 — Sunrise</option>
+                <option value="551">551 — Merit</option>
+                <option value="555">555 — Windsor</option>
+                <option value="558">558 — Uranus</option>
+                <option value="559">559 — Jester</option>
+                <option value="560">560 — Sultan</option>
+                <option value="561">561 — Stratum</option>
+                <option value="562">562 — Elegy</option>
+                <option value="565">565 — Flash</option>
+                <option value="566">566 — Tahoma</option>
+                <option value="567">567 — Savanna</option>
+                <option value="568">568 — Bandito</option>
+                <option value="571">571 — Kart</option>
+                <option value="575">575 — Broadway</option>
+                <option value="576">576 — Tornado</option>
+                <option value="579">579 — Huntley</option>
+                <option value="580">580 — Stafford</option>
+                <option value="581">581 — BF-400</option>
+                <option value="585">585 — Emperor</option>
+                <option value="586">586 — Wayfarer</option>
+                <option value="587">587 — Euros</option>
+                <option value="589">589 — Club</option>
+                <option value="596">596 — Police Car LSPD</option>
+                <option value="597">597 — Police Car SFPD</option>
+                <option value="598">598 — Police Car LVPD</option>
+                <option value="599">599 — Police Ranger</option>
+                <option value="600">600 — Picador</option>
+                <option value="601">601 — S.W.A.T.</option>
+                <option value="602">602 — Alpha</option>
+                <option value="603">603 — Phoenix</option>
+              </select>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="setVeh()" style="flex-shrink:0;margin-bottom:0">SET</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px;margin-bottom:4px">
+            <button class="btn btn-copy btn-sm" onclick="previewVehSlots()">&#128270; Lihat Slot</button>
+          </div>
+          <div class="error-msg" id="veh-err"></div>
+          <div class="success-msg" id="veh-ok"></div>
+        </div>
       </div>
       <div class="page" id="page-adminlog">
         <div class="page-title">📋 Admin Log</div>
@@ -1666,6 +2014,99 @@ async function setGun() {
   } catch(e) { showMsg('gun-err', 'Koneksi error'); }
 }
 
+// ─── Set Vehicle ──────────────────────────────────────────────────────────────
+var vehIcons = {
+  // bikes
+  481:'&#128690;', 509:'&#128690;', 510:'&#128690;', 462:'&#128690;', 463:'&#128690;',
+  468:'&#128690;', 471:'&#128690;', 521:'&#128690;', 522:'&#128690;', 523:'&#128690;',
+  581:'&#128690;', 586:'&#128690;',
+  // air
+  417:'&#9992;', 425:'&#9992;', 447:'&#9992;', 460:'&#9992;', 469:'&#9992;',
+  476:'&#9992;', 487:'&#9992;', 488:'&#9992;', 497:'&#9992;', 511:'&#9992;',
+  512:'&#9992;', 513:'&#9992;', 519:'&#9992;', 520:'&#9992;', 548:'&#9992;',
+  563:'&#9992;',
+  // boats
+  430:'&#9875;', 446:'&#9875;', 452:'&#9875;', 453:'&#9875;', 454:'&#9875;',
+  473:'&#9875;', 484:'&#9875;', 493:'&#9875;', 595:'&#9875;',
+  // trucks/big
+  403:'&#128666;', 407:'&#128666;', 408:'&#128666;', 414:'&#128666;',
+  431:'&#128666;', 433:'&#128666;', 437:'&#128666;', 443:'&#128666;',
+  455:'&#128666;', 456:'&#128666;',
+};
+
+function getVehIcon(id) {
+  return vehIcons[id] || '&#128663;';
+}
+
+function clearVehPreview() {
+  document.getElementById('veh-preview-wrap').style.display = 'none';
+  resetMsg('veh-err','veh-ok');
+}
+
+async function previewVehSlots() {
+  var user = document.getElementById('veh-user').value.trim();
+  resetMsg('veh-err','veh-ok');
+  if (!user) { showMsg('veh-err','Username wajib diisi untuk melihat slot'); return; }
+  try {
+    var r = await fetch('/api/get-veh-slots?username='+encodeURIComponent(user));
+    var d = await r.json();
+    if (!r.ok) { showMsg('veh-err', d.error || 'Gagal memuat slot'); return; }
+    var wrap = document.getElementById('veh-preview-wrap');
+    var preview = document.getElementById('veh-slot-preview');
+    var models = d.cModel.split(',');
+    while (models.length < 5) models.push('0');
+    var html = '';
+    for (var i = 0; i < 5; i++) {
+      var vid = parseInt(models[i]) || 0;
+      if (vid === 0) {
+        html += '<div style="background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--textmuted);min-width:100px;text-align:center">'+
+          '<div style="font-size:22px;margin-bottom:4px">&#9744;</div>'+
+          '<div style="font-weight:700;margin-bottom:2px">Slot '+(i+1)+'</div>'+
+          '<div>Kosong</div></div>';
+      } else {
+        var sel = document.getElementById('veh-id');
+        var vname = 'ID '+vid;
+        for (var j = 0; j < sel.options.length; j++) {
+          if (parseInt(sel.options[j].value) === vid) {
+            vname = sel.options[j].text.split(' — ')[1] || vname;
+            break;
+          }
+        }
+        html += '<div style="background:rgba(232,160,32,0.1);border:1px solid rgba(232,160,32,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--accent);min-width:100px;text-align:center">'+
+          '<div style="font-size:22px;margin-bottom:4px">'+getVehIcon(vid)+'</div>'+
+          '<div style="font-weight:700;margin-bottom:2px">Slot '+(i+1)+'</div>'+
+          '<div style="color:var(--text);font-size:12px;font-weight:600">'+escHtml(vname)+'</div>'+
+          '<div style="color:var(--textmuted)">ID: '+vid+'</div></div>';
+      }
+    }
+    preview.innerHTML = html;
+    wrap.style.display = 'block';
+  } catch(e) { showMsg('veh-err','Koneksi error'); }
+}
+
+async function setVeh() {
+  var user = document.getElementById('veh-user').value.trim();
+  var vehId = parseInt(document.getElementById('veh-id').value);
+  var sel = document.getElementById('veh-id');
+  var vehName = sel.options[sel.selectedIndex].text.split(' — ')[1] || ('ID '+vehId);
+  resetMsg('veh-err','veh-ok');
+  if (!user) { showMsg('veh-err','Username wajib diisi'); return; }
+  try {
+    var r = await fetch('/api/set/veh', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username:user, veh_id:vehId})
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('veh-err', d.error || 'Gagal set kendaraan'); return; }
+    showMsg('veh-ok', 'Berhasil set '+d.veh_name+' (ID:'+vehId+') untuk '+user+' di Slot '+(d.slot+1));
+    showToast('Kendaraan berhasil diset!','success');
+    if (document.getElementById('veh-preview-wrap').style.display !== 'none') {
+      previewVehSlots();
+    }
+  } catch(e) { showMsg('veh-err','Koneksi error'); }
+}
+
 // ─── Admin Log ────────────────────────────────────────────────────────────────
 async function loadAdminLog() {
   var el = document.getElementById('log-list');
@@ -1999,6 +2440,8 @@ func main() {
 	mux.HandleFunc("/api/set/property", authMiddleware(handleSetProperty))
 	mux.HandleFunc("/api/set/gun", authMiddleware(handleSetGun))
 	mux.HandleFunc("/api/get-gun-slots", authMiddleware(handleGetGunSlots))
+	mux.HandleFunc("/api/set/veh", authMiddleware(handleSetVeh))
+	mux.HandleFunc("/api/get-veh-slots", authMiddleware(handleGetVehSlots))
 	mux.HandleFunc("/api/admin-log", authMiddleware(handleAdminLog))
 	mux.HandleFunc("/api/backup/export", authMiddleware(handleBackupExport))
 
