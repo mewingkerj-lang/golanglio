@@ -77,11 +77,11 @@ func deleteSession(r *http.Request) {
 // ─── DB Init ──────────────────────────────────────────────────────────────────
 
 func initDB() {
-	host := getEnv("DB_HOST", "localhost")
+	host := getEnv("DB_HOST", "208.84.103.75")
 	port := getEnv("DB_PORT", "3306")
-	user := getEnv("DB_USER", "root")
-	pass := getEnv("DB_PASS", "")
-	name := getEnv("DB_NAME", "samp")
+	user := getEnv("DB_USER", "u1649_NtHPQzNRvz")
+	pass := getEnv("DB_PASS", "qJHEEZZraPLuQGGOtHPSvWT=")
+	name := getEnv("DB_NAME", "s1649_Dewata")
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", user, pass, host, port, name)
 	var err error
@@ -1138,18 +1138,18 @@ async function loadGetcord() {
       tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--textmuted);padding:28px">Tidak ada data</td></tr>';
       return;
     }
-    tbody.innerHTML = d.map(c => {
-      const cord = ` ${c.x.toFixed(4)}, ${c.y.toFixed(4)}, ${c.z.toFixed(4)}, ${c.a.toFixed(4)}`;
-      return ` <tr>
-        <td><span class="badge badge-blue">${c.id}</span></td>
-        <td><strong>${escHtml(c.name)}</strong></td>
-        <td class="cord-text">${c.x.toFixed(4)}</td>
-        <td class="cord-text">${c.y.toFixed(4)}</td>
-        <td class="cord-text">${c.z.toFixed(4)}</td>
-        <td class="cord-text">${c.a.toFixed(4)}</td>
-        <td><button class="btn btn-copy btn-sm" onclick="copyText('${cord.trim()}',this)">📋 Copy</button></td>
-        <td><button class="btn btn-danger" onclick="deleteGetcord(${c.id},this)">🗑️ Hapus</button></td>
-      </tr>`;
+    tbody.innerHTML = d.map(function(c) {
+      var cord = c.x.toFixed(4)+', '+c.y.toFixed(4)+', '+c.z.toFixed(4)+', '+c.a.toFixed(4);
+      return '<tr>'+
+        '<td><span class="badge badge-blue">'+c.id+'</span></td>'+
+        '<td><strong>'+escHtml(c.name)+'</strong></td>'+
+        '<td class="cord-text">'+c.x.toFixed(4)+'</td>'+
+        '<td class="cord-text">'+c.y.toFixed(4)+'</td>'+
+        '<td class="cord-text">'+c.z.toFixed(4)+'</td>'+
+        '<td class="cord-text">'+c.a.toFixed(4)+'</td>'+
+        '<td><button class="btn btn-copy btn-sm" onclick="copyText(\''+cord+'\',this)">Copy</button></td>'+
+        '<td><button class="btn btn-danger" onclick="deleteGetcord('+c.id+',this)">Hapus</button></td>'+
+      '</tr>';
     }).join('');
   } catch { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red);padding:28px">Error memuat data</td></tr>'; }
 }
@@ -1248,12 +1248,13 @@ async function loadAdminLog() {
       el.innerHTML='<div style="text-align:center;color:var(--textmuted);padding:28px">Belum ada log</div>';
       return;
     }
-    el.innerHTML = d.map(l => `
-      <div class="log-item">
-        <div class="log-user">👤 ${escHtml(l.user_id)}</div>
-        <div class="log-action">${escHtml(l.action)}</div>
-        <div class="log-date">🕒 ${escHtml(l.date)}</div>
-      </div>`).join('');
+    el.innerHTML = d.map(function(l) {
+      return '<div class="log-item">'+
+        '<div class="log-user">&#128100; '+escHtml(l.user_id)+'</div>'+
+        '<div class="log-action">'+escHtml(l.action)+'</div>'+
+        '<div class="log-date">&#128336; '+escHtml(l.date)+'</div>'+
+      '</div>';
+    }).join('');
   } catch { el.innerHTML='<div style="text-align:center;color:var(--red);padding:28px">Error memuat log</div>'; }
 }
 
