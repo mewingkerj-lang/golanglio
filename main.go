@@ -484,21 +484,24 @@ func handleAdminLog(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, 500, map[string]string{"error": "database not connected"})
 		return
 	}
-	rows, err := db.Query("SELECT user_id, action, date FROM admin_log ORDER BY id DESC LIMIT 200")
+	// user_id is INT, no auto-increment id column — order by date DESC
+	rows, err := db.Query("SELECT user_id, action, date FROM admin_log ORDER BY date DESC LIMIT 200")
 	if err != nil {
 		jsonResp(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
 	defer rows.Close()
 	type LogEntry struct {
-		UserID string `json:"user_id"`
+		UserID int    `json:"user_id"`
 		Action string `json:"action"`
 		Date   string `json:"date"`
 	}
 	var list []LogEntry
 	for rows.Next() {
 		var e LogEntry
-		if err := rows.Scan(&e.UserID, &e.Action, &e.Date); err == nil {
+		var rawDate []byte
+		if err := rows.Scan(&e.UserID, &e.Action, &rawDate); err == nil {
+			e.Date = string(rawDate)
 			list = append(list, e)
 		}
 	}
@@ -508,12 +511,30 @@ func handleAdminLog(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, list)
 }
 
+// lookupAccountID returns the integer account ID for a given username (pName)
+// Falls back to 0 if not found or DB unavailable
+func lookupAccountID(username string) int {
+	if db == nil {
+		return 0
+	}
+	var id int
+	// Try common ID column names used in SAMP scripts
+	for _, col := range []string{"ID", "pID", "id", "AccountID"} {
+		err := db.QueryRow("SELECT `"+col+"` FROM accounts WHERE pName=? LIMIT 1", username).Scan(&id)
+		if err == nil {
+			return id
+		}
+	}
+	return 0
+}
+
 func logAction(username, action string) {
 	if db == nil {
 		return
 	}
+	uid := lookupAccountID(username)
 	db.Exec("INSERT INTO admin_log (user_id, action, date) VALUES (?, ?, ?)",
-		username, action, time.Now().Format("2006-01-02 15:04:05"))
+		uid, action, time.Now().Format("2006-01-02 15:04:05"))
 }
 
 // ─── HTML Page ────────────────────────────────────────────────────────────────
@@ -1389,23 +1410,27 @@ async function setProp(type, userEl, valEl, okEl, errEl) {
 
 // ─── Admin Log ────────────────────────────────────────────────────────────────
 async function loadAdminLog() {
-  const el = document.getElementById('log-list');
+  var el = document.getElementById('log-list');
   el.innerHTML = '<div style="text-align:center;color:var(--textmuted);padding:28px">Memuat log...</div>';
   try {
-    const r = await fetch('/api/admin-log');
-    const d = await r.json();
-    if (!r.ok || !Array.isArray(d) || d.length===0) {
-      el.innerHTML='<div style="text-align:center;color:var(--textmuted);padding:28px">Belum ada log</div>';
+    var r = await fetch('/api/admin-log');
+    var d = await r.json();
+    if (!r.ok || !Array.isArray(d) || d.length === 0) {
+      el.innerHTML = '<div style="text-align:center;color:var(--textmuted);padding:28px">Belum ada log</div>';
       return;
     }
     el.innerHTML = d.map(function(l) {
+      var uid = l.user_id || 0;
+      var dateStr = l.date ? l.date.replace('T',' ').substring(0,19) : '-';
       return '<div class="log-item">'+
-        '<div class="log-user">&#128100; '+escHtml(l.user_id)+'</div>'+
+        '<div class="log-user"><span class="badge badge-blue" style="font-size:11px;letter-spacing:0.5px">ID&nbsp;'+uid+'</span></div>'+
         '<div class="log-action">'+escHtml(l.action)+'</div>'+
-        '<div class="log-date">&#128336; '+escHtml(l.date)+'</div>'+
+        '<div class="log-date">&#128336;&nbsp;'+escHtml(dateStr)+'</div>'+
       '</div>';
     }).join('');
-  } catch { el.innerHTML='<div style="text-align:center;color:var(--red);padding:28px">Error memuat log</div>'; }
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;color:var(--red);padding:28px">Error memuat log</div>';
+  }
 }
 
 // ─── Backup Export ────────────────────────────────────────────────────────────
