@@ -543,165 +543,229 @@ const htmlPage = `<!DOCTYPE html>
   --text:#d0dcea;
   --textmuted:#6a8099;
   --sidebar:260px;
+  --topbar:64px;
 }
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;min-height:100vh;overflow-x:hidden}
-/* Loading Screen */
-#loading-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;transition:opacity 0.5s}
-#loading-screen.hidden{opacity:0;pointer-events:none}
-.loading-logo{width:120px;height:120px;border-radius:16px;object-fit:cover;box-shadow:0 0 40px var(--accentglow)}
-.loading-bar-wrap{width:280px;height:4px;background:var(--surface3);border-radius:99px;overflow:hidden}
-.loading-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:99px;transition:width 0.3s}
-.loading-text{font-family:'Rajdhani',sans-serif;font-size:13px;letter-spacing:3px;color:var(--textmuted);text-transform:uppercase}
 
-/* Auth Screens */
-#auth-wrapper{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:100}
+/* ── Reset ── */
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+
+/* ── Loading ── */
+#loading-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px;transition:opacity 0.5s}
+#loading-screen.hidden{opacity:0;pointer-events:none}
+.loading-logo{width:clamp(80px,20vw,120px);height:clamp(80px,20vw,120px);border-radius:16px;object-fit:cover;box-shadow:0 0 40px var(--accentglow)}
+.loading-bar-wrap{width:min(280px,85vw);height:4px;background:var(--surface3);border-radius:99px;overflow:hidden}
+.loading-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:99px;transition:width 0.3s}
+.loading-text{font-family:'Rajdhani',sans-serif;font-size:12px;letter-spacing:3px;color:var(--textmuted);text-transform:uppercase;text-align:center}
+
+/* ── Auth ── */
+#auth-wrapper{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:100;padding:16px;overflow-y:auto}
 #auth-wrapper.hidden{display:none}
-.auth-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:40px;width:100%;max-width:420px;position:relative;overflow:hidden}
+.auth-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:clamp(24px,5vw,40px);width:100%;max-width:420px;position:relative;overflow:hidden;margin:auto}
 .auth-box::before{content:'';position:absolute;top:-60px;right:-60px;width:180px;height:180px;background:radial-gradient(circle,var(--accentglow),transparent 70%);pointer-events:none}
-.auth-banner{width:100%;border-radius:12px;margin-bottom:24px;object-fit:cover;height:120px}
-.auth-title{font-family:'Rajdhani',sans-serif;font-size:26px;font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:6px}
-.auth-sub{font-size:13px;color:var(--textmuted);margin-bottom:28px}
-.form-group{margin-bottom:18px}
-.form-group label{display:block;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px}
-.form-group input,.form-group select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-family:'Exo 2',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s}
+.auth-banner-wrap{width:100%;border-radius:12px;margin-bottom:20px;overflow:hidden;background:var(--surface2);aspect-ratio:16/5;display:flex;align-items:center;justify-content:center}
+.auth-banner{width:100%;height:100%;object-fit:cover;display:block}
+.auth-banner-fallback{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--accent);letter-spacing:2px;text-align:center;padding:16px}
+.auth-title{font-family:'Rajdhani',sans-serif;font-size:clamp(20px,5vw,26px);font-weight:700;letter-spacing:2px;color:var(--accent);margin-bottom:6px}
+.auth-sub{font-size:13px;color:var(--textmuted);margin-bottom:24px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:600}
+.form-group input,.form-group select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text);font-family:'Exo 2',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s;-webkit-appearance:none;appearance:none}
 .form-group input:focus,.form-group select:focus{border-color:var(--accent)}
-.btn{width:100%;padding:13px;border:none;border-radius:10px;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all 0.2s;text-transform:uppercase}
+.form-group select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236a8099' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+.btn{width:100%;padding:13px;border:none;border-radius:10px;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all 0.2s;text-transform:uppercase;touch-action:manipulation}
 .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0c10}
 .btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 24px var(--accentglow)}
-.btn-danger{background:var(--red);color:#fff;padding:8px 16px;width:auto;font-size:13px;border-radius:8px;letter-spacing:1px}
-.btn-sm{padding:8px 16px;width:auto;font-size:13px;border-radius:8px;letter-spacing:1px}
+.btn-primary:active{transform:translateY(0)}
+.btn-danger{background:var(--red);color:#fff;padding:9px 16px;width:auto;font-size:13px;border-radius:8px;letter-spacing:1px}
+.btn-sm{padding:9px 16px;width:auto;font-size:13px;border-radius:8px;letter-spacing:1px}
 .btn-copy{background:var(--surface3);color:var(--accent);border:1px solid var(--border)}
 .btn-copy:hover{background:var(--accentglow)}
-.auth-error{background:rgba(232,48,48,0.1);border:1px solid var(--red);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--red);margin-bottom:16px;display:none}
+.auth-error{background:rgba(232,48,48,0.1);border:1px solid var(--red);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--red);margin-bottom:14px;display:none}
 .auth-error.show{display:block}
 
-/* App Layout */
+/* ── App Layout ── */
 #app{display:none;min-height:100vh}
 #app.visible{display:flex}
 
-/* Sidebar */
-#sidebar{width:var(--sidebar);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:transform 0.3s,width 0.3s;position:fixed;top:0;bottom:0;left:0;z-index:50;overflow:hidden}
+/* ── Sidebar ── */
+#sidebar{
+  width:var(--sidebar);
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);
+  position:fixed;top:0;bottom:0;left:0;
+  z-index:50;overflow:hidden;
+  will-change:transform;
+}
+/* Desktop: sidebar collapsed = slide left */
 #sidebar.collapsed{transform:translateX(calc(-1 * var(--sidebar)))}
-.sidebar-header{padding:20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
-.sidebar-logo{width:40px;height:40px;border-radius:10px;object-fit:cover;flex-shrink:0}
-.sidebar-title{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;color:var(--accent);letter-spacing:1px;white-space:nowrap}
-.sidebar-nav{flex:1;overflow-y:auto;padding:12px 8px}
-.nav-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;cursor:pointer;transition:all 0.2s;color:var(--textmuted);margin-bottom:4px;font-weight:500;white-space:nowrap}
+/* Mobile: sidebar hidden by default, shown when .open */
+.sidebar-header{padding:18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0}
+.sidebar-logo-wrap{width:40px;height:40px;border-radius:10px;overflow:hidden;flex-shrink:0;background:var(--surface2);display:flex;align-items:center;justify-content:center}
+.sidebar-logo{width:100%;height:100%;object-fit:cover;display:block}
+.sidebar-logo-fallback{font-size:20px;line-height:1}
+.sidebar-title{font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;color:var(--accent);letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar-nav{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 8px}
+.nav-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;cursor:pointer;transition:all 0.2s;color:var(--textmuted);margin-bottom:4px;font-weight:500;white-space:nowrap;user-select:none;border:1px solid transparent;-webkit-tap-highlight-color:transparent}
 .nav-item:hover{background:var(--surface3);color:var(--text)}
-.nav-item.active{background:linear-gradient(135deg,rgba(232,160,32,0.15),rgba(240,192,64,0.08));color:var(--accent);border:1px solid rgba(232,160,32,0.2)}
-.nav-icon{font-size:18px;flex-shrink:0;width:22px;text-align:center}
-.sidebar-footer{padding:16px;border-top:1px solid var(--border)}
-.sidebar-user{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-.user-avatar{width:36px;height:36px;background:var(--accentglow);border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);flex-shrink:0}
-.user-info{flex:1;overflow:hidden}
+.nav-item:active{transform:scale(0.98)}
+.nav-item.active{background:linear-gradient(135deg,rgba(232,160,32,0.15),rgba(240,192,64,0.08));color:var(--accent);border-color:rgba(232,160,32,0.2)}
+.nav-icon{font-size:18px;flex-shrink:0;width:24px;text-align:center}
+.sidebar-footer{padding:14px;border-top:1px solid var(--border);flex-shrink:0}
+.sidebar-user{display:flex;align-items:center;gap:10px;margin-bottom:12px;min-width:0}
+.user-avatar{width:38px;height:38px;background:var(--accentglow);border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);flex-shrink:0;font-size:16px}
+.user-info{flex:1;min-width:0;overflow:hidden}
 .user-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.user-role{font-size:11px;color:var(--accent);letter-spacing:1px}
+.user-role{font-size:10px;color:var(--accent);letter-spacing:1px;text-transform:uppercase}
 
-/* Main Content */
-#main{flex:1;margin-left:var(--sidebar);transition:margin-left 0.3s;display:flex;flex-direction:column;min-height:100vh}
+/* ── Main ── */
+#main{flex:1;margin-left:var(--sidebar);transition:margin-left 0.3s cubic-bezier(0.4,0,0.2,1);display:flex;flex-direction:column;min-height:100vh;min-width:0}
 #main.expanded{margin-left:0}
 
-/* Topbar */
-#topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:64px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:40}
-#menu-toggle{background:none;border:1px solid var(--border);border-radius:10px;padding:8px 12px;cursor:pointer;color:var(--text);font-size:18px;transition:all 0.2s}
+/* ── Topbar ── */
+#topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;height:var(--topbar);display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:40;flex-shrink:0}
+#menu-toggle{background:none;border:1px solid var(--border);border-radius:10px;padding:8px 11px;cursor:pointer;color:var(--text);font-size:18px;transition:all 0.2s;flex-shrink:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 #menu-toggle:hover{background:var(--surface3);border-color:var(--accent);color:var(--accent)}
-.topbar-title{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--accent);letter-spacing:1px;flex:1}
-.topbar-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--textmuted)}
-.status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+.topbar-title{font-family:'Rajdhani',sans-serif;font-size:clamp(16px,3vw,20px);font-weight:700;color:var(--accent);letter-spacing:1px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--textmuted);flex-shrink:0;max-width:140px;overflow:hidden}
+.topbar-status span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);flex-shrink:0}
 
-/* Page Content */
-#content{flex:1;padding:28px;overflow-x:hidden}
+/* ── Page Content ── */
+#content{flex:1;padding:clamp(14px,3vw,28px);overflow-x:hidden}
 .page{display:none}
 .page.active{display:block}
 
-/* Cards */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px}
-.card-title{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:16px;display:flex;align-items:center;gap:10px}
-.page-title{font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:var(--text);letter-spacing:2px;margin-bottom:6px}
-.page-sub{color:var(--textmuted);font-size:14px;margin-bottom:24px}
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:clamp(16px,3vw,24px);margin-bottom:18px}
+.card-title{font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.page-title{font-family:'Rajdhani',sans-serif;font-size:clamp(22px,5vw,28px);font-weight:700;color:var(--text);letter-spacing:2px;margin-bottom:6px}
+.page-sub{color:var(--textmuted);font-size:13px;margin-bottom:20px;line-height:1.5}
 
-/* Dashboard */
-.dash-banner{width:100%;border-radius:16px;height:180px;object-fit:cover;margin-bottom:24px;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
-.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
-.info-card{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:20px}
-.info-label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px}
-.info-value{font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:var(--text);margin-bottom:12px;word-break:break-all}
-.info-copy-btn{display:inline-flex;align-items:center;gap:6px;background:var(--surface3);border:1px solid var(--border);color:var(--accent);padding:6px 14px;border-radius:8px;font-size:12px;font-family:'Rajdhani',sans-serif;letter-spacing:1px;cursor:pointer;transition:all 0.2s;font-weight:600}
+/* ── Dashboard Banner ── */
+.dash-banner-wrap{width:100%;border-radius:16px;overflow:hidden;margin-bottom:20px;background:var(--surface2);aspect-ratio:16/5;min-height:100px;max-height:220px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+.dash-banner{width:100%;height:100%;object-fit:cover;display:block}
+.dash-banner-fallback{font-family:'Rajdhani',sans-serif;font-size:clamp(16px,4vw,24px);font-weight:700;color:var(--accent);letter-spacing:3px;text-align:center;padding:20px}
+
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:16px}
+.info-card{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:18px}
+.info-label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:600}
+.info-value{font-family:'Rajdhani',sans-serif;font-size:clamp(16px,3vw,22px);font-weight:700;color:var(--text);margin-bottom:12px;word-break:break-all;line-height:1.3}
+.info-copy-btn{display:inline-flex;align-items:center;gap:6px;background:var(--surface3);border:1px solid var(--border);color:var(--accent);padding:7px 14px;border-radius:8px;font-size:12px;font-family:'Rajdhani',sans-serif;letter-spacing:1px;cursor:pointer;transition:all 0.2s;font-weight:600;touch-action:manipulation}
 .info-copy-btn:hover{background:var(--accentglow);border-color:var(--accent)}
 
-/* Table */
-.table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border)}
-table{width:100%;border-collapse:collapse;font-size:13px}
-thead th{background:var(--surface2);padding:12px 16px;text-align:left;font-family:'Rajdhani',sans-serif;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--textmuted);border-bottom:1px solid var(--border)}
-tbody td{padding:12px 16px;border-bottom:1px solid rgba(30,45,69,0.5);vertical-align:middle}
+/* ── Table ── */
+.table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:520px}
+thead th{background:var(--surface2);padding:12px 14px;text-align:left;font-family:'Rajdhani',sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--textmuted);border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:11px 14px;border-bottom:1px solid rgba(30,45,69,0.5);vertical-align:middle}
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:var(--surface2)}
-.cord-text{font-family:monospace;font-size:12px;color:var(--accent2)}
+.cord-text{font-family:monospace;font-size:11px;color:var(--accent2)}
 .badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;font-family:'Rajdhani',sans-serif;letter-spacing:1px}
 .badge-green{background:rgba(32,192,96,0.15);color:var(--green);border:1px solid rgba(32,192,96,0.3)}
 .badge-blue{background:rgba(32,136,232,0.15);color:var(--blue);border:1px solid rgba(32,136,232,0.3)}
 
-/* Set Form */
-.set-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-.set-card{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:20px}
-.set-title{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
-.input-row{display:flex;gap:10px;margin-bottom:12px;align-items:flex-end}
-.input-row .form-group{flex:1;margin-bottom:0}
+/* ── Set Form ── */
+.set-card{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:18px}
+.set-title{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+/* Input row stacks on small screens */
+.input-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;margin-bottom:12px;align-items:flex-end}
+.input-row .form-group{margin-bottom:0}
+.prop-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 .success-msg{background:rgba(32,192,96,0.1);border:1px solid var(--green);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--green);margin-top:10px;display:none}
 .success-msg.show{display:block}
 .error-msg{background:rgba(232,48,48,0.1);border:1px solid var(--red);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--red);margin-top:10px;display:none}
 .error-msg.show{display:block}
 
-/* Log */
-.log-item{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid rgba(30,45,69,0.5)}
+/* ── Log ── */
+.log-item{display:flex;align-items:flex-start;gap:10px;padding:12px 0;border-bottom:1px solid rgba(30,45,69,0.5);flex-wrap:wrap}
 .log-item:last-child{border-bottom:none}
-.log-user{font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--accent);min-width:120px;flex-shrink:0}
-.log-action{font-size:13px;flex:1;color:var(--text)}
-.log-date{font-size:11px;color:var(--textmuted);flex-shrink:0;white-space:nowrap}
+.log-user{font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--accent);min-width:110px;flex-shrink:0}
+.log-action{font-size:13px;flex:1;color:var(--text);min-width:120px;word-break:break-word}
+.log-date{font-size:11px;color:var(--textmuted);white-space:nowrap;flex-shrink:0}
 
-/* Toast */
-#toast{position:fixed;bottom:28px;right:28px;background:var(--surface3);border:1px solid var(--border);border-radius:12px;padding:14px 20px;font-size:13px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:9999;transform:translateY(80px);opacity:0;transition:all 0.3s;max-width:320px}
+/* ── Toast ── */
+#toast{position:fixed;bottom:20px;right:16px;left:16px;max-width:340px;margin:0 auto;background:var(--surface3);border:1px solid var(--border);border-radius:12px;padding:13px 18px;font-size:13px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:9999;transform:translateY(100px);opacity:0;transition:all 0.3s}
 #toast.show{transform:translateY(0);opacity:1}
 #toast.success{border-color:var(--green);color:var(--green)}
 #toast.error{border-color:var(--red);color:var(--red)}
 
-/* Overlay */
-#sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:49}
+/* ── Overlay ── */
+#sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:49;backdrop-filter:blur(2px)}
 #sidebar-overlay.show{display:block}
 
-/* Responsive */
-@media(max-width:768px){
-  #main{margin-left:0}
-  #main.expanded{margin-left:0}
-  #sidebar{transform:translateX(calc(-1 * var(--sidebar)))}
-  #sidebar.open{transform:translateX(0)}
-  .info-grid{grid-template-columns:1fr}
-  .set-grid{grid-template-columns:1fr}
-  #content{padding:16px}
-}
-
-/* Animations */
+/* ── Animations ── */
 @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-.page.active{animation:fadeIn 0.3s ease}
+.page.active{animation:fadeIn 0.25s ease}
 @keyframes pulse{0%,100%{box-shadow:0 0 6px var(--green)}50%{box-shadow:0 0 12px var(--green)}}
 .status-dot{animation:pulse 2s infinite}
 
-/* Scrollbar */
-::-webkit-scrollbar{width:6px;height:6px}
+@keyframes exportpulse{0%{width:15%}50%{width:85%}100%{width:15%}}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:var(--surface)}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
 ::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+
+/* ══════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+══════════════════════════════════════ */
+
+/* Tablet & below: sidebar becomes drawer */
+@media(max-width:900px){
+  #sidebar{transform:translateX(calc(-1 * var(--sidebar)))}
+  #sidebar.collapsed{transform:translateX(calc(-1 * var(--sidebar)))}
+  #sidebar.open{transform:translateX(0)}
+  #main{margin-left:0 !important}
+}
+
+/* Mobile landscape / small tablet */
+@media(max-width:640px){
+  :root{--topbar:56px}
+  #content{padding:12px}
+  .card{padding:14px;border-radius:12px;margin-bottom:12px}
+  .page-title{font-size:20px;letter-spacing:1px}
+  .input-row{grid-template-columns:1fr 1fr;gap:8px}
+  .input-row .btn-sm{grid-column:1/-1;width:100%}
+  .info-grid{grid-template-columns:1fr}
+  .dash-banner-wrap{aspect-ratio:16/6;min-height:80px}
+  table{min-width:460px}
+  .topbar-status{display:none}
+}
+
+/* Mobile portrait */
+@media(max-width:420px){
+  .auth-box{padding:20px 16px;border-radius:16px}
+  .auth-banner-wrap{aspect-ratio:16/6}
+  .input-row{grid-template-columns:1fr}
+  .input-row .btn-sm{width:100%}
+  .log-item{flex-direction:column;gap:4px}
+  .log-date{align-self:flex-end}
+  #toast{left:10px;right:10px;bottom:12px}
+}
+
+/* Desktop large: wider sidebar option */
+@media(min-width:1400px){
+  :root{--sidebar:280px}
+}
 </style>
 </head>
 <body>
 
 <!-- Loading -->
 <div id="loading-screen">
-  <img class="loading-logo" src="https://logo-dewata-nationrp.edgeone.app/IMG-20260131-WA0425.jpg" alt="Logo" onerror="this.style.display='none'"/>
-  <div>
-    <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:var(--accent);letter-spacing:3px;text-align:center;margin-bottom:4px">DEWATA NATION RP</div>
-    <div style="font-size:11px;letter-spacing:4px;color:var(--textmuted);text-align:center;margin-bottom:20px">ADMIN CONTROL PANEL</div>
+  <div id="loading-img-wrap" style="width:clamp(80px,20vw,120px);height:clamp(80px,20vw,120px);border-radius:16px;overflow:hidden;box-shadow:0 0 40px var(--accentglow);background:var(--surface2);display:flex;align-items:center;justify-content:center">
+    <img id="loading-logo" src="/icon/iconme.png" alt="Logo" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none';document.getElementById('loading-logo-fb').style.display='block'"/>
+    <span id="loading-logo-fb" style="display:none;font-size:36px">&#9889;</span>
+  </div>
+  <div style="text-align:center">
+    <div style="font-family:'Rajdhani',sans-serif;font-size:clamp(18px,5vw,22px);font-weight:700;color:var(--accent);letter-spacing:3px;margin-bottom:4px">DEWATA NATION RP</div>
+    <div style="font-size:11px;letter-spacing:4px;color:var(--textmuted);margin-bottom:20px">ADMIN CONTROL PANEL</div>
     <div class="loading-bar-wrap"><div class="loading-bar" id="loading-bar"></div></div>
   </div>
   <div class="loading-text" id="loading-text">Initializing...</div>
@@ -710,8 +774,11 @@ tbody tr:hover{background:var(--surface2)}
 <!-- Auth: Login -->
 <div id="auth-wrapper">
   <div id="login-box" class="auth-box">
-    <img class="auth-banner" src="https://logo-dewata-nationrp.edgeone.app/IMG-20260131-WA0425.jpg" alt="Banner" onerror="this.style.display='none'"/>
-    <div class="auth-title">⚡ DEWATA NATION RP</div>
+    <div class="auth-banner-wrap">
+      <img class="auth-banner" src="/icon/iconme.png" alt="Dewata Nation RP" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+      <div class="auth-banner-fallback" style="display:none;width:100%;align-items:center;justify-content:center">&#9889; DEWATA NATION RP</div>
+    </div>
+    <div class="auth-title">&#9889; DEWATA NATION RP</div>
     <div class="auth-sub">Admin Control Panel — Masuk untuk melanjutkan</div>
     <div class="auth-error" id="login-error"></div>
     <div class="form-group">
@@ -725,7 +792,11 @@ tbody tr:hover{background:var(--surface2)}
     <button class="btn btn-primary" onclick="doLogin()">MASUK</button>
   </div>
   <div id="adminkey-box" class="auth-box" style="display:none">
-    <div class="auth-title">🔑 VERIFIKASI ADMIN</div>
+    <div class="auth-banner-wrap">
+      <img class="auth-banner" src="/icon/iconme.png" alt="Dewata Nation RP" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+      <div class="auth-banner-fallback" style="display:none;width:100%;align-items:center;justify-content:center">&#128273; VERIFIKASI ADMIN</div>
+    </div>
+    <div class="auth-title">&#128273; VERIFIKASI ADMIN</div>
     <div class="auth-sub">Masukkan Admin Key untuk akses panel</div>
     <div class="auth-error" id="key-error"></div>
     <div class="form-group">
@@ -744,7 +815,10 @@ tbody tr:hover{background:var(--surface2)}
   <!-- Sidebar -->
   <nav id="sidebar">
     <div class="sidebar-header">
-      <img class="sidebar-logo" src="https://logo-dewata-nationrp.edgeone.app/IMG-20260131-WA0425.jpg" alt="Logo" onerror="this.style.display='none'"/>
+      <div class="sidebar-logo-wrap">
+        <img class="sidebar-logo" src="/icon/iconme.png" alt="Logo" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"/>
+        <span class="sidebar-logo-fallback" style="display:none">&#9889;</span>
+      </div>
       <div class="sidebar-title">DEWATA NRP</div>
     </div>
     <div class="sidebar-nav">
@@ -763,6 +837,10 @@ tbody tr:hover{background:var(--surface2)}
       <div class="nav-item" onclick="showPage('adminlog')">
         <span class="nav-icon">📋</span>
         <span>Admin Log</span>
+      </div>
+      <div class="nav-item" onclick="showPage('backup')">
+        <span class="nav-icon">💾</span>
+        <span>Backup Database</span>
       </div>
     </div>
     <div class="sidebar-footer">
@@ -792,7 +870,10 @@ tbody tr:hover{background:var(--surface2)}
 
       <!-- Dashboard Page -->
       <div class="page active" id="page-dashboard">
-        <img class="dash-banner" src="https://logo-dewata-nationrp.edgeone.app/IMG-20260131-WA0425.jpg" alt="Banner" onerror="this.style.height='0';this.style.margin='0'"/>
+        <div class="dash-banner-wrap">
+          <img class="dash-banner" src="/icon/iconme.png" alt="Dewata Nation RP" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+          <div class="dash-banner-fallback" style="display:none;width:100%;align-items:center;justify-content:center">&#9889; DEWATA NATION ROLEPLAY</div>
+        </div>
         <div class="page-title">Dashboard</div>
         <div class="page-sub">Selamat datang di Dewata Nation Roleplay Admin Panel. Gunakan menu sidebar untuk navigasi fitur.</div>
         <div class="info-grid">
@@ -920,7 +1001,7 @@ tbody tr:hover{background:var(--surface2)}
         <!-- Set Property -->
         <div class="card">
           <div class="card-title">🔧 Set Properti Pemain</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" id="prop-grid">
+          <div class="prop-grid" id="prop-grid">
             <!-- pSkin -->
             <div class="set-card">
               <div class="set-title">🎭 Set Skin</div>
@@ -983,32 +1064,90 @@ tbody tr:hover{background:var(--surface2)}
   </div><!-- /main -->
 </div><!-- /app -->
 
+<!-- Backup Page (inside content, added via JS showPage) -->
+<template id="tpl-backup">
+  <div class="page" id="page-backup">
+    <div class="page-title">💾 Backup Database</div>
+    <div class="page-sub">Export seluruh struktur dan data database server Dewata Nation RP.</div>
+    <div class="card">
+      <div class="card-title">&#128190; Export Database</div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:28px;text-align:center;margin-bottom:20px">
+        <div style="font-size:48px;margin-bottom:16px">&#128190;</div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:var(--text);margin-bottom:8px">Full Database Export</div>
+        <div style="font-size:13px;color:var(--textmuted);margin-bottom:24px;max-width:480px;margin-left:auto;margin-right:auto;line-height:1.7">
+          Export seluruh struktur tabel (CREATE TABLE) beserta data (INSERT INTO) dari database <strong style="color:var(--accent)">s1649_Dewata</strong> ke file <code style="background:var(--surface3);padding:2px 8px;border-radius:4px;font-size:12px">.sql</code> yang bisa di-import kembali.
+        </div>
+        <button id="export-btn" class="btn btn-primary" style="max-width:320px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:10px;font-size:17px" onclick="doExport()">
+          <span>&#128190;</span>
+          <span>EXPORT DATABASE SEKARANG</span>
+        </button>
+        <div id="export-progress" style="display:none;margin-top:20px">
+          <div style="font-size:13px;color:var(--textmuted);margin-bottom:10px">Sedang mengekspor database, harap tunggu...</div>
+          <div style="width:100%;max-width:320px;margin:0 auto;height:4px;background:var(--surface3);border-radius:99px;overflow:hidden">
+            <div id="export-bar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:99px;animation:exportpulse 1.5s ease-in-out infinite"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:0;background:var(--surface2)">
+        <div class="card-title" style="font-size:14px;margin-bottom:12px">&#128274; Informasi Backup</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;font-size:13px;color:var(--textmuted)">
+          <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:var(--accent);flex-shrink:0">&#10003;</span><span>Termasuk semua tabel dan struktur</span></div>
+          <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:var(--accent);flex-shrink:0">&#10003;</span><span>Termasuk seluruh data setiap tabel</span></div>
+          <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:var(--accent);flex-shrink:0">&#10003;</span><span>Format .sql siap di-import</span></div>
+          <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:var(--accent);flex-shrink:0">&#10003;</span><span>Tercatat di Admin Log</span></div>
+          <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:var(--accent);flex-shrink:0">&#10003;</span><span>Nama file otomatis dengan timestamp</span></div>
+          <div style="display:flex;align-items:flex-start;gap:10px"><span style="color:var(--accent);flex-shrink:0">&#10003;</span><span>Aman: hanya admin yang bisa akses</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
 <!-- Toast -->
 <div id="toast"></div>
 
 <script>
 // ─── State ─────────────────────────────────────────────────────────────────────
-let currentUser = '';
-let tempLoginUser = '';
-let sidebarOpen = false;
-let isMobile = window.innerWidth <= 768;
+var currentUser = '';
+var tempLoginUser = '';
+var sidebarOpen = false;
 
-window.addEventListener('resize', () => { isMobile = window.innerWidth <= 768; });
+function isDrawerMode() { return window.innerWidth <= 900; }
+
+window.addEventListener('resize', function() {
+  // On resize: if switching to desktop, remove drawer classes; apply push logic
+  if (!isDrawerMode()) {
+    document.getElementById('sidebar-overlay').classList.remove('show');
+    document.getElementById('sidebar').classList.remove('open');
+    if (sidebarOpen) {
+      document.getElementById('sidebar').classList.remove('collapsed');
+      document.getElementById('main').classList.remove('expanded');
+    } else {
+      document.getElementById('sidebar').classList.add('collapsed');
+      document.getElementById('main').classList.add('expanded');
+    }
+  } else {
+    // Mobile: main always full width
+    document.getElementById('main').classList.add('expanded');
+    document.getElementById('main').classList.remove('expanded'); // reset to let CSS handle
+    document.getElementById('main').style.marginLeft = '';
+  }
+});
 
 // ─── Loading ───────────────────────────────────────────────────────────────────
 function startLoading() {
-  const bar = document.getElementById('loading-bar');
-  const text = document.getElementById('loading-text');
-  const msgs = ['Initializing...','Connecting to database...','Loading modules...','Verifying session...','Ready!'];
-  let pct = 0, i = 0;
-  const iv = setInterval(() => {
+  var bar = document.getElementById('loading-bar');
+  var text = document.getElementById('loading-text');
+  var msgs = ['Initializing...','Connecting to database...','Loading modules...','Verifying session...','Ready!'];
+  var pct = 0, i = 0;
+  var iv = setInterval(function() {
     pct += Math.random() * 22 + 8;
     if (pct > 100) pct = 100;
     bar.style.width = pct + '%';
     if (i < msgs.length) text.textContent = msgs[i++];
     if (pct >= 100) {
       clearInterval(iv);
-      setTimeout(() => {
+      setTimeout(function() {
         document.getElementById('loading-screen').classList.add('hidden');
         checkAuth();
       }, 400);
@@ -1019,14 +1158,14 @@ function startLoading() {
 // ─── Auth ──────────────────────────────────────────────────────────────────────
 async function checkAuth() {
   try {
-    const r = await fetch('/api/check-auth');
+    var r = await fetch('/api/check-auth');
     if (r.ok) {
-      const d = await r.json();
+      var d = await r.json();
       enterApp(d.username);
     } else {
       showAuth();
     }
-  } catch { showAuth(); }
+  } catch(e) { showAuth(); }
 }
 
 function showAuth() {
@@ -1036,33 +1175,33 @@ function showAuth() {
 }
 
 async function doLogin() {
-  const user = document.getElementById('login-user').value.trim();
-  const pass = document.getElementById('login-pass').value;
-  const errEl = document.getElementById('login-error');
+  var user = document.getElementById('login-user').value.trim();
+  var pass = document.getElementById('login-pass').value;
+  var errEl = document.getElementById('login-error');
   errEl.classList.remove('show');
   if (!user || !pass) { showErr(errEl, 'Username dan password wajib diisi'); return; }
   try {
-    const r = await fetch('/api/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
-    const d = await r.json();
+    var r = await fetch('/api/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pass})});
+    var d = await r.json();
     if (!r.ok) { showErr(errEl, d.error || 'Login gagal'); return; }
     tempLoginUser = d.username;
     document.getElementById('login-box').style.display = 'none';
     document.getElementById('adminkey-box').style.display = '';
     document.getElementById('admin-key').focus();
-  } catch { showErr(errEl, 'Koneksi error'); }
+  } catch(e) { showErr(errEl, 'Koneksi error'); }
 }
 
 async function doVerifyKey() {
-  const key = document.getElementById('admin-key').value.trim();
-  const errEl = document.getElementById('key-error');
+  var key = document.getElementById('admin-key').value.trim();
+  var errEl = document.getElementById('key-error');
   errEl.classList.remove('show');
   if (!key) { showErr(errEl, 'Admin key wajib diisi'); return; }
   try {
-    const r = await fetch('/api/verify-admin-key', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:tempLoginUser,admin_key:key})});
-    const d = await r.json();
+    var r = await fetch('/api/verify-admin-key', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:tempLoginUser,admin_key:key})});
+    var d = await r.json();
     if (!r.ok) { showErr(errEl, d.error || 'Verifikasi gagal'); return; }
     enterApp(d.username);
-  } catch { showErr(errEl, 'Koneksi error'); }
+  } catch(e) { showErr(errEl, 'Koneksi error'); }
 }
 
 async function doLogout() {
@@ -1076,54 +1215,64 @@ async function doLogout() {
 function enterApp(username) {
   currentUser = username;
   document.getElementById('auth-wrapper').classList.add('hidden');
-  const app = document.getElementById('app');
+  var app = document.getElementById('app');
   app.style.display = 'flex';
   app.classList.add('visible');
   document.getElementById('sidebar-username').textContent = username;
   document.getElementById('admin-name-top').textContent = username;
   document.getElementById('user-avatar').textContent = username.charAt(0).toUpperCase();
-  // Desktop: open sidebar by default
-  if (!isMobile) openSidebar();
+  // Open sidebar on desktop by default, closed on mobile
+  if (!isDrawerMode()) {
+    sidebarOpen = true;
+    document.getElementById('sidebar').classList.remove('collapsed');
+    document.getElementById('main').classList.remove('expanded');
+  } else {
+    sidebarOpen = false;
+    document.getElementById('main').classList.add('expanded');
+  }
   showPage('dashboard');
 }
 
 // ─── Sidebar ───────────────────────────────────────────────────────────────────
 function toggleSidebar() {
-  if (isMobile) {
-    const sb = document.getElementById('sidebar');
-    const ov = document.getElementById('sidebar-overlay');
-    sidebarOpen = !sidebarOpen;
+  var sb = document.getElementById('sidebar');
+  var ov = document.getElementById('sidebar-overlay');
+  var main = document.getElementById('main');
+  sidebarOpen = !sidebarOpen;
+  if (isDrawerMode()) {
+    // Drawer mode: slide over content
     sb.classList.toggle('open', sidebarOpen);
     ov.classList.toggle('show', sidebarOpen);
   } else {
-    const sb = document.getElementById('sidebar');
-    const main = document.getElementById('main');
-    sidebarOpen = !sidebarOpen;
+    // Push mode: sidebar pushes main content
     sb.classList.toggle('collapsed', !sidebarOpen);
     main.classList.toggle('expanded', !sidebarOpen);
   }
 }
 
-function openSidebar() {
-  const sb = document.getElementById('sidebar');
-  const main = document.getElementById('main');
-  sidebarOpen = true;
-  sb.classList.remove('collapsed');
-  main.classList.remove('expanded');
-}
-
 // ─── Pages ─────────────────────────────────────────────────────────────────────
-const pageTitles = {dashboard:'Dashboard',getcord:'Getcord List',set:'Set Menu',adminlog:'Admin Log'};
+var pageTitles = {dashboard:'Dashboard',getcord:'Getcord List',set:'Set Menu',adminlog:'Admin Log',backup:'Backup Database'};
 
 function showPage(name) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  // Inject backup template on first use
+  if (name === 'backup' && !document.getElementById('page-backup')) {
+    var tpl = document.getElementById('tpl-backup');
+    var node = tpl.content.cloneNode(true);
+    document.getElementById('content').appendChild(node);
+  }
+  document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
   document.getElementById('page-'+name).classList.add('active');
   document.getElementById('page-title').textContent = pageTitles[name] || name;
-  const navItems = document.querySelectorAll('.nav-item');
-  const idx = {dashboard:0,getcord:1,set:2,adminlog:3};
+  var navItems = document.querySelectorAll('.nav-item');
+  var idx = {dashboard:0,getcord:1,set:2,adminlog:3,backup:4};
   if (navItems[idx[name]]) navItems[idx[name]].classList.add('active');
-  if (isMobile) { sidebarOpen=false; document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebar-overlay').classList.remove('show'); }
+  // Close drawer on mobile after nav
+  if (isDrawerMode() && sidebarOpen) {
+    sidebarOpen = false;
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('show');
+  }
   if (name==='getcord') loadGetcord();
   if (name==='adminlog') loadAdminLog();
 }
@@ -1259,6 +1408,49 @@ async function loadAdminLog() {
   } catch { el.innerHTML='<div style="text-align:center;color:var(--red);padding:28px">Error memuat log</div>'; }
 }
 
+// ─── Backup Export ────────────────────────────────────────────────────────────
+function doExport() {
+  var btn = document.getElementById('export-btn');
+  var prog = document.getElementById('export-progress');
+  if (!btn || !prog) return;
+  btn.disabled = true;
+  btn.style.opacity = '0.6';
+  btn.style.cursor = 'not-allowed';
+  prog.style.display = 'block';
+  showToast('Sedang mengekspor database...', 'success');
+
+  // Use fetch + blob download to handle the file
+  fetch('/api/backup/export')
+    .then(function(r) {
+      if (!r.ok) {
+        return r.json().then(function(d) { throw new Error(d.error || 'Export gagal'); });
+      }
+      var disposition = r.headers.get('Content-Disposition') || '';
+      var filenameMatch = disposition.match(/filename="(.+?)"/);
+      var filename = filenameMatch ? filenameMatch[1] : 'dewata_backup.sql';
+      return r.blob().then(function(blob) { return {blob: blob, filename: filename}; });
+    })
+    .then(function(result) {
+      var url = URL.createObjectURL(result.blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = result.filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function() { URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
+      showToast('Export berhasil! File sedang diunduh.', 'success');
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    })
+    .finally(function() {
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.cursor = '';
+      prog.style.display = 'none';
+    });
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function copyText(text, btn) {
   navigator.clipboard.writeText(text).then(() => {
@@ -1297,12 +1489,206 @@ startLoading();
 </body>
 </html>`
 
+// ─── Backup / Export ──────────────────────────────────────────────────────────
+
+func handleBackupExport(w http.ResponseWriter, r *http.Request) {
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	dbName := getEnv("DB_NAME", "s1649_Dewata")
+	var buf strings.Builder
+
+	buf.WriteString("-- ============================================================\n")
+	buf.WriteString("-- Dewata Nation RP — Full Database Backup\n")
+	buf.WriteString(fmt.Sprintf("-- Database : %s\n", dbName))
+	buf.WriteString(fmt.Sprintf("-- Generated: %s\n", time.Now().Format("2006-01-02 15:04:05")))
+	buf.WriteString("-- ============================================================\n\n")
+	buf.WriteString("SET FOREIGN_KEY_CHECKS=0;\n")
+	buf.WriteString("SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n")
+	buf.WriteString("SET NAMES utf8mb4;\n\n")
+
+	// Get all tables
+	tableRows, err := db.Query("SHOW FULL TABLES")
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "failed to list tables: " + err.Error()})
+		return
+	}
+	defer tableRows.Close()
+
+	var tables []struct{ name, ttype string }
+	for tableRows.Next() {
+		var t, tt string
+		if err := tableRows.Scan(&t, &tt); err == nil {
+			tables = append(tables, struct{ name, ttype string }{t, tt})
+		}
+	}
+	tableRows.Close()
+
+	for _, tbl := range tables {
+		buf.WriteString(fmt.Sprintf("-- ------------------------------------------------------------\n"))
+		buf.WriteString(fmt.Sprintf("-- Table: %s\n", tbl.name))
+		buf.WriteString(fmt.Sprintf("-- ------------------------------------------------------------\n\n"))
+
+		// DROP + CREATE structure
+		var createName, createSQL string
+		if tbl.ttype == "VIEW" {
+			row := db.QueryRow(fmt.Sprintf("SHOW CREATE VIEW `%s`", tbl.name))
+			var viewName, viewSQL, cs, cc string
+			if err := row.Scan(&viewName, &viewSQL, &cs, &cc); err == nil {
+				buf.WriteString(fmt.Sprintf("DROP VIEW IF EXISTS `%s`;\n", tbl.name))
+				buf.WriteString(viewSQL + ";\n\n")
+			}
+			continue
+		}
+
+		row := db.QueryRow(fmt.Sprintf("SHOW CREATE TABLE `%s`", tbl.name))
+		if err := row.Scan(&createName, &createSQL); err != nil {
+			buf.WriteString(fmt.Sprintf("-- ERROR getting structure for %s: %v\n\n", tbl.name, err))
+			continue
+		}
+		buf.WriteString(fmt.Sprintf("DROP TABLE IF EXISTS `%s`;\n", tbl.name))
+		buf.WriteString(createSQL + ";\n\n")
+
+		// Get row count
+		var rowCount int
+		db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM `%s`", tbl.name)).Scan(&rowCount)
+		if rowCount == 0 {
+			continue
+		}
+
+		// Get columns
+		colRows, err := db.Query(fmt.Sprintf("SHOW COLUMNS FROM `%s`", tbl.name))
+		if err != nil {
+			continue
+		}
+		var colNames []string
+		for colRows.Next() {
+			var field, ftype, null, key, def, extra sql.NullString
+			if err := colRows.Scan(&field, &ftype, &null, &key, &def, &extra); err == nil {
+				colNames = append(colNames, field.String)
+			}
+		}
+		colRows.Close()
+
+		// Stream rows in batches of 500
+		dataRows, err := db.Query(fmt.Sprintf("SELECT * FROM `%s`", tbl.name))
+		if err != nil {
+			buf.WriteString(fmt.Sprintf("-- ERROR reading data for %s\n\n", tbl.name))
+			continue
+		}
+
+		cols, _ := dataRows.Columns()
+		vals := make([]interface{}, len(cols))
+		valPtrs := make([]interface{}, len(cols))
+		for i := range vals {
+			valPtrs[i] = &vals[i]
+		}
+
+		buf.WriteString(fmt.Sprintf("-- Data for table `%s` (%d rows)\n", tbl.name, rowCount))
+
+		batchCount := 0
+		batchSize := 500
+		first := true
+
+		for dataRows.Next() {
+			if err := dataRows.Scan(valPtrs...); err != nil {
+				continue
+			}
+
+			if first || batchCount%batchSize == 0 {
+				if !first {
+					buf.WriteString(";\n")
+				}
+				// Build INSERT header
+				colList := "`" + strings.Join(colNames, "`,`") + "`"
+				buf.WriteString(fmt.Sprintf("INSERT INTO `%s` (%s) VALUES\n", tbl.name, colList))
+				first = false
+			} else {
+				buf.WriteString(",\n")
+			}
+
+			// Build row values
+			buf.WriteString("(")
+			for i, val := range vals {
+				if i > 0 {
+					buf.WriteString(",")
+				}
+				if val == nil {
+					buf.WriteString("NULL")
+				} else {
+					switch v := val.(type) {
+					case []byte:
+						buf.WriteString("'")
+						buf.WriteString(strings.ReplaceAll(string(v), "'", "\\'"))
+						buf.WriteString("'")
+					case string:
+						buf.WriteString("'")
+						buf.WriteString(strings.ReplaceAll(v, "'", "\\'"))
+						buf.WriteString("'")
+					case int64:
+						buf.WriteString(fmt.Sprintf("%d", v))
+					case float64:
+						buf.WriteString(fmt.Sprintf("%g", v))
+					case bool:
+						if v {
+							buf.WriteString("1")
+						} else {
+							buf.WriteString("0")
+						}
+					case time.Time:
+						buf.WriteString("'")
+						buf.WriteString(v.Format("2006-01-02 15:04:05"))
+						buf.WriteString("'")
+					default:
+						buf.WriteString(fmt.Sprintf("'%v'", v))
+					}
+				}
+			}
+			buf.WriteString(")")
+			batchCount++
+		}
+		dataRows.Close()
+
+		if !first {
+			buf.WriteString(";\n")
+		}
+		buf.WriteString("\n")
+	}
+
+	buf.WriteString("SET FOREIGN_KEY_CHECKS=1;\n")
+	buf.WriteString(fmt.Sprintf("-- ============================================================\n"))
+	buf.WriteString(fmt.Sprintf("-- Backup complete: %s\n", time.Now().Format("2006-01-02 15:04:05")))
+	buf.WriteString(fmt.Sprintf("-- ============================================================\n"))
+
+	filename := fmt.Sprintf("dewata_backup_%s.sql", time.Now().Format("20060102_150405"))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(200)
+	w.Write([]byte(buf.String()))
+
+	// Log the action
+	if cookie, err := r.Cookie("session_token"); err == nil {
+		sessionsMu.RLock()
+		s, ok := sessions[cookie.Value]
+		sessionsMu.RUnlock()
+		if ok {
+			logAction(s.Username, "Export backup database full")
+		}
+	}
+}
+
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
 func main() {
 	initDB()
 
 	mux := http.NewServeMux()
+
+	// Static files: icon folder
+	mux.Handle("/icon/", http.StripPrefix("/icon/", http.FileServer(http.Dir("icon"))))
 
 	// Static page
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -1329,10 +1715,11 @@ func main() {
 	mux.HandleFunc("/api/set/account", authMiddleware(handleSetAccount))
 	mux.HandleFunc("/api/set/property", authMiddleware(handleSetProperty))
 	mux.HandleFunc("/api/admin-log", authMiddleware(handleAdminLog))
+	mux.HandleFunc("/api/backup/export", authMiddleware(handleBackupExport))
 
 	port := getEnv("PORT", "8080")
 	addr := ":" + port
-	log.Printf("🚀 Dewata Nation RP Admin Panel running on %s", addr)
+	log.Printf("Dewata Nation RP Admin Panel running on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)
 	}
