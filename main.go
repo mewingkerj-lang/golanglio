@@ -918,6 +918,116 @@ func handleGetVehSlots(w http.ResponseWriter, r *http.Request) {
 
 
 
+// ─── Set VIP ──────────────────────────────────────────────────────────────────
+
+func handleSetVip(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+		VipType  int    `json:"vip_type"`
+		Days     int    `json:"days"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	// Validate vip type
+	vipNames := map[int]string{0: "Non-VIP", 1: "VIP Low", 2: "VIP Medium", 3: "VIP High"}
+	vipName, ok := vipNames[req.VipType]
+	if !ok {
+		jsonResp(w, 400, map[string]string{"error": "tipe VIP tidak valid (0-3)"})
+		return
+	}
+
+	// Validate days — only required when activating VIP (type > 0)
+	if req.VipType > 0 {
+		if req.Days <= 0 {
+			jsonResp(w, 400, map[string]string{"error": "hari harus lebih dari 0 saat mengaktifkan VIP"})
+			return
+		}
+		if req.Days > 3650 {
+			jsonResp(w, 400, map[string]string{"error": "maksimal 3650 hari (10 tahun)"})
+			return
+		}
+	}
+
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	// Check user exists
+	var pName string
+	if err := db.QueryRow("SELECT pName FROM accounts WHERE pName=?", req.Username).Scan(&pName); err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "user tidak ditemukan"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "db error: " + err.Error()})
+		return
+	}
+
+	// pVipTime stores remaining days as integer
+	var vipTime int
+	if req.VipType == 0 {
+		vipTime = 0 // nonaktifkan, reset waktu
+	} else {
+		// Read current pVipTime and add on top if already active
+		var curTime int
+		db.QueryRow("SELECT pVipTime FROM accounts WHERE pName=?", req.Username).Scan(&curTime)
+		if curTime > 0 {
+			vipTime = curTime + req.Days // tambah ke sisa waktu yang ada
+		} else {
+			vipTime = req.Days
+		}
+	}
+
+	_, err := db.Exec("UPDATE accounts SET pVip=?, pVipTime=? WHERE pName=?", req.VipType, vipTime, req.Username)
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal update: " + err.Error()})
+		return
+	}
+
+	s, _ := getSession(r)
+	if req.VipType == 0 {
+		logAction(s.Username, fmt.Sprintf("Nonaktifkan VIP untuk %s", req.Username))
+	} else {
+		logAction(s.Username, fmt.Sprintf("Set %s +%d hari (total %d hari) untuk %s", vipName, req.Days, vipTime, req.Username))
+	}
+
+	jsonResp(w, 200, map[string]any{
+		"status":   "updated",
+		"vip_name": vipName,
+		"vip_type": req.VipType,
+		"vip_time": vipTime,
+	})
+}
+
+func handleGetVip(w http.ResponseWriter, r *http.Request) {
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		jsonResp(w, 400, map[string]string{"error": "username required"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+	var pVip, pVipTime int
+	err := db.QueryRow("SELECT pVip, pVipTime FROM accounts WHERE pName=?", username).Scan(&pVip, &pVipTime)
+	if err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "user tidak ditemukan"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	jsonResp(w, 200, map[string]any{"pVip": pVip, "pVipTime": pVipTime})
+}
+
 // ─── HTML Page ────────────────────────────────────────────────────────────────
 
 const htmlPage = `<!DOCTYPE html>
@@ -1451,6 +1561,55 @@ tbody tr:hover{background:var(--surface2)}
           </div>
         </div>
         
+        <!-- Set VIP -->
+        <div class="card">
+          <div class="card-title">&#11088; Set VIP Pemain</div>
+
+          <!-- Current VIP info panel -->
+          <div id="vip-info-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+            <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:10px;font-weight:600">Info VIP Saat Ini</div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px" id="vip-info-content"></div>
+          </div>
+
+          <div class="input-row">
+            <div class="form-group">
+              <label>Username</label>
+              <input type="text" id="vip-user" placeholder="Username..." oninput="clearVipInfo()"/>
+            </div>
+            <div class="form-group">
+              <label>Tipe VIP</label>
+              <select id="vip-type" onchange="onVipTypeChange()">
+                <option value="0">0 — Nonaktifkan VIP</option>
+                <option value="1">1 — VIP Low</option>
+                <option value="2">2 — VIP Medium</option>
+                <option value="3">3 — VIP High</option>
+              </select>
+            </div>
+            <div class="form-group" id="vip-days-wrap">
+              <label>Durasi (hari)</label>
+              <input type="number" id="vip-days" placeholder="30" min="1" max="3650"/>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="setVip()" style="flex-shrink:0;margin-bottom:0">SET</button>
+          </div>
+
+          <!-- Quick presets -->
+          <div id="vip-presets" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+            <span style="font-size:11px;color:var(--textmuted);align-self:center;letter-spacing:1px;text-transform:uppercase;font-weight:600">Quick:</span>
+            <button class="btn btn-copy btn-sm" onclick="setVipDays(7)">7 Hari</button>
+            <button class="btn btn-copy btn-sm" onclick="setVipDays(30)">30 Hari</button>
+            <button class="btn btn-copy btn-sm" onclick="setVipDays(90)">90 Hari</button>
+            <button class="btn btn-copy btn-sm" onclick="setVipDays(180)">180 Hari</button>
+            <button class="btn btn-copy btn-sm" onclick="setVipDays(365)">1 Tahun</button>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-bottom:4px">
+            <button class="btn btn-copy btn-sm" onclick="checkVipStatus()">&#128270; Cek Status VIP</button>
+          </div>
+
+          <div class="error-msg" id="vip-err"></div>
+          <div class="success-msg" id="vip-ok"></div>
+        </div>
+
         <!-- Set Gun -->
         <div class="card">
           <div class="card-title">&#128299; Set Senjata Pemain</div>
@@ -2042,6 +2201,97 @@ async function setProp(type, userEl, valEl, okEl, errEl) {
   } catch { document.getElementById(errEl).textContent='Koneksi error'; document.getElementById(errEl).classList.add('show'); }
 }
 
+// ─── Set VIP ──────────────────────────────────────────────────────────────────
+var vipLabels = {0:'Non-VIP', 1:'VIP Low', 2:'VIP Medium', 3:'VIP High'};
+var vipColors = {0:'var(--textmuted)', 1:'#4fc3f7', 2:'#29b6f6', 3:'#00d4ff'};
+var vipBadgeBg = {
+  0:'rgba(100,120,140,0.15)',
+  1:'rgba(79,195,247,0.12)',
+  2:'rgba(41,182,246,0.15)',
+  3:'rgba(0,212,255,0.18)'
+};
+
+function clearVipInfo() {
+  document.getElementById('vip-info-wrap').style.display = 'none';
+  resetMsg('vip-err','vip-ok');
+}
+
+function onVipTypeChange() {
+  var type = parseInt(document.getElementById('vip-type').value);
+  var daysWrap = document.getElementById('vip-days-wrap');
+  var presets = document.getElementById('vip-presets');
+  if (type === 0) {
+    daysWrap.style.display = 'none';
+    presets.style.display = 'none';
+  } else {
+    daysWrap.style.display = '';
+    presets.style.display = 'flex';
+  }
+}
+
+function setVipDays(n) {
+  document.getElementById('vip-days').value = n;
+}
+
+async function checkVipStatus() {
+  var user = document.getElementById('vip-user').value.trim();
+  resetMsg('vip-err','vip-ok');
+  if (!user) { showMsg('vip-err','Username wajib diisi'); return; }
+  try {
+    var r2 = await fetch('/api/get-vip?username='+encodeURIComponent(user));
+    var d2 = await r2.json();
+    if (!r2.ok) { showMsg('vip-err', d2.error || 'User tidak ditemukan'); return; }
+    var vtype = d2.pVip;
+    var vtime = d2.pVipTime;
+    var label = vipLabels[vtype] || 'Unknown';
+    var col = vipColors[vtype] || 'var(--textmuted)';
+    var bg = vipBadgeBg[vtype] || 'var(--surface3)';
+    var wrap = document.getElementById('vip-info-wrap');
+    var content = document.getElementById('vip-info-content');
+    content.innerHTML =
+      '<div style="background:'+bg+';border:1px solid '+col+';border-radius:10px;padding:12px 18px;min-width:120px;text-align:center">'+
+        '<div style="font-size:11px;color:var(--textmuted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Status</div>'+
+        '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+col+'">'+escHtml(label)+'</div>'+
+      '</div>'+
+      '<div style="background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:120px;text-align:center">'+
+        '<div style="font-size:11px;color:var(--textmuted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Sisa Waktu</div>'+
+        '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--text)">'+vtime+' <span style="font-size:13px;font-weight:400;color:var(--textmuted)">hari</span></div>'+
+      '</div>'+
+      '<div style="background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:120px;text-align:center">'+
+        '<div style="font-size:11px;color:var(--textmuted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">ID Tipe</div>'+
+        '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--text)">'+vtype+'</div>'+
+      '</div>';
+    wrap.style.display = 'block';
+  } catch(e) { showMsg('vip-err','Koneksi error'); }
+}
+
+async function setVip() {
+  var user = document.getElementById('vip-user').value.trim();
+  var vtype = parseInt(document.getElementById('vip-type').value);
+  var days = vtype === 0 ? 0 : parseInt(document.getElementById('vip-days').value);
+  resetMsg('vip-err','vip-ok');
+  if (!user) { showMsg('vip-err','Username wajib diisi'); return; }
+  if (vtype > 0) {
+    if (isNaN(days) || days <= 0) { showMsg('vip-err','Masukkan jumlah hari yang valid'); return; }
+    if (days > 3650) { showMsg('vip-err','Maksimal 3650 hari (10 tahun)'); return; }
+  }
+  try {
+    var r = await fetch('/api/set/vip', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:user, vip_type:vtype, days:days})
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('vip-err', d.error || 'Gagal set VIP'); return; }
+    var msg = vtype === 0
+      ? 'VIP '+user+' berhasil dinonaktifkan'
+      : 'Berhasil set '+d.vip_name+' untuk '+user+' — Total: '+d.vip_time+' hari';
+    showMsg('vip-ok', msg);
+    showToast('VIP berhasil diset!','success');
+    if (document.getElementById('vip-info-wrap').style.display !== 'none') checkVipStatus();
+  } catch(e) { showMsg('vip-err','Koneksi error'); }
+}
+
 // ─── Set Gun ──────────────────────────────────────────────────────────────────
 var gunNames = {
   23:'Silenced Pistol', 24:'Desert Eagle', 25:'Shotgun',
@@ -2541,6 +2791,8 @@ func main() {
 	mux.HandleFunc("/api/set/item", authMiddleware(handleSetItem))
 	mux.HandleFunc("/api/set/account", authMiddleware(handleSetAccount))
 	mux.HandleFunc("/api/set/property", authMiddleware(handleSetProperty))
+	mux.HandleFunc("/api/set/vip", authMiddleware(handleSetVip))
+	mux.HandleFunc("/api/get-vip", authMiddleware(handleGetVip))
 	mux.HandleFunc("/api/set/gun", authMiddleware(handleSetGun))
 	mux.HandleFunc("/api/get-gun-slots", authMiddleware(handleGetGunSlots))
 	mux.HandleFunc("/api/set/veh", authMiddleware(handleSetVeh))
