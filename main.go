@@ -1125,7 +1125,223 @@ func handleGetInventory(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, d)
 }
 
-// ─── HTML Page ────────────────────────────────────────────────────────────────
+// ─── Set Admin ────────────────────────────────────────────────────────────────
+
+var adminLevels = map[int]string{
+	1:  "Admin Trial",
+	2:  "Admin",
+	3:  "Admin",
+	4:  "Admin",
+	5:  "Admin",
+	6:  "Admin",
+	7:  "Admin",
+	8:  "High Admin",
+	9:  "Handle Admin",
+	10: "Co-Owner",
+	15: "Owner",
+	20: "Developer",
+}
+
+func handleSetAdmin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+		Level    int    `json:"level"`
+		AName    string `json:"aname"`
+		Key      string `json:"key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	levelName, ok := adminLevels[req.Level]
+	if !ok {
+		jsonResp(w, 400, map[string]string{"error": "level admin tidak valid"})
+		return
+	}
+	if strings.TrimSpace(req.Username) == "" {
+		jsonResp(w, 400, map[string]string{"error": "username wajib diisi"})
+		return
+	}
+	if strings.TrimSpace(req.AName) == "" {
+		jsonResp(w, 400, map[string]string{"error": "admin name wajib diisi"})
+		return
+	}
+	if strings.TrimSpace(req.Key) == "" {
+		jsonResp(w, 400, map[string]string{"error": "admin key wajib diisi"})
+		return
+	}
+	if len(req.AName) > 32 {
+		jsonResp(w, 400, map[string]string{"error": "admin name maksimal 32 karakter"})
+		return
+	}
+	if len(req.Key) > 32 {
+		jsonResp(w, 400, map[string]string{"error": "admin key maksimal 32 karakter"})
+		return
+	}
+
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	// Check if player exists in accounts
+	var pName string
+	if err := db.QueryRow("SELECT pName FROM accounts WHERE pName=?", req.Username).Scan(&pName); err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "player tidak ditemukan di tabel accounts"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "db error: " + err.Error()})
+		return
+	}
+
+	// Check if already exists in admin table
+	var existName string
+	exists := db.QueryRow("SELECT Name FROM admin WHERE Name=?", req.Username).Scan(&existName) == nil
+
+	var dbErr error
+	if exists {
+		// UPDATE existing record
+		_, dbErr = db.Exec(
+			"UPDATE admin SET pAdmin=?, pAname=?, pAdminKey=? WHERE Name=?",
+			req.Level, req.AName, req.Key, req.Username,
+		)
+	} else {
+		// INSERT new admin record
+		_, dbErr = db.Exec(
+			"INSERT INTO admin (Name, pAdmin, pAname, pAdminKey, pAdmRep, pAdmRepDay, pAdmKick, pAdmBan, pAdmWarn, pAdmPrison, pAdmMute, pDataNaz) VALUES (?,?,?,?,0,0,0,0,0,0,0,'')",
+			req.Username, req.Level, req.AName, req.Key,
+		)
+	}
+	if dbErr != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal simpan: " + dbErr.Error()})
+		return
+	}
+
+	s, _ := getSession(r)
+	action := "Set admin"
+	if exists {
+		action = "Update admin"
+	}
+	logAction(s.Username, fmt.Sprintf("%s %s → Level %d (%s) / AName:%s", action, req.Username, req.Level, levelName, req.AName))
+
+	jsonResp(w, 200, map[string]any{
+		"status":     "ok",
+		"action":     action,
+		"level_name": levelName,
+		"is_new":     !exists,
+	})
+}
+
+func handleGetAdminInfo(w http.ResponseWriter, r *http.Request) {
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		jsonResp(w, 400, map[string]string{"error": "username required"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+	type AdminInfo struct {
+		Name       string `json:"Name"`
+		PAdmin     int    `json:"pAdmin"`
+		PAname     string `json:"pAname"`
+		PAdminKey  string `json:"pAdminKey"`
+		PAdmRep    int    `json:"pAdmRep"`
+		PAdmKick   int    `json:"pAdmKick"`
+		PAdmBan    int    `json:"pAdmBan"`
+		PAdmWarn   int    `json:"pAdmWarn"`
+		PAdmPrison int    `json:"pAdmPrison"`
+		PAdmMute   int    `json:"pAdmMute"`
+		InviteDate string `json:"invite_date"`
+	}
+	var a AdminInfo
+	var rawDate []byte
+	err := db.QueryRow("SELECT Name,pAdmin,pAname,pAdminKey,pAdmRep,pAdmKick,pAdmBan,pAdmWarn,pAdmPrison,pAdmMute,invite_date FROM admin WHERE Name=?", username).
+		Scan(&a.Name, &a.PAdmin, &a.PAname, &a.PAdminKey, &a.PAdmRep, &a.PAdmKick, &a.PAdmBan, &a.PAdmWarn, &a.PAdmPrison, &a.PAdmMute, &rawDate)
+	if err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "tidak ditemukan di tabel admin"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	a.InviteDate = string(rawDate)
+	jsonResp(w, 200, a)
+}
+
+func handleRemoveAdmin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+	res, err := db.Exec("DELETE FROM admin WHERE Name=?", req.Username)
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		jsonResp(w, 404, map[string]string{"error": "admin tidak ditemukan"})
+		return
+	}
+	s, _ := getSession(r)
+	logAction(s.Username, fmt.Sprintf("Remove admin %s dari tabel admin", req.Username))
+	jsonResp(w, 200, map[string]string{"status": "removed"})
+}
+
+func handleGetAdminList(w http.ResponseWriter, r *http.Request) {
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+	rows, err := db.Query("SELECT Name, pAdmin, pAname, pAdmRep, pAdmKick, pAdmBan, invite_date FROM admin ORDER BY pAdmin DESC")
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	type AdminRow struct {
+		Name       string `json:"Name"`
+		PAdmin     int    `json:"pAdmin"`
+		PAname     string `json:"pAname"`
+		PAdmRep    int    `json:"pAdmRep"`
+		PAdmKick   int    `json:"pAdmKick"`
+		PAdmBan    int    `json:"pAdmBan"`
+		InviteDate string `json:"invite_date"`
+	}
+	var list []AdminRow
+	for rows.Next() {
+		var a AdminRow
+		var rawDate []byte
+		if err := rows.Scan(&a.Name, &a.PAdmin, &a.PAname, &a.PAdmRep, &a.PAdmKick, &a.PAdmBan, &rawDate); err == nil {
+			a.InviteDate = string(rawDate)
+			list = append(list, a)
+		}
+	}
+	if list == nil {
+		list = []AdminRow{}
+	}
+	jsonResp(w, 200, list)
+}
+
+
 
 const htmlPage = `<!DOCTYPE html>
 <html lang="id">
@@ -1450,6 +1666,10 @@ tbody tr:hover{background:var(--surface2)}
       <div class="nav-item" onclick="showPage('inventory')">
         <span class="nav-icon">🎒</span>
         <span>Inventori Player</span>
+      </div>
+      <div class="nav-item" onclick="showPage('setadmin')">
+        <span class="nav-icon">🛡️</span>
+        <span>Set Admin</span>
       </div>
       <div class="nav-item" onclick="showPage('backup')">
         <span class="nav-icon">💾</span>
@@ -2018,6 +2238,93 @@ tbody tr:hover{background:var(--surface2)}
   </div>
 </template>
 
+<!-- Set Admin Page -->
+<template id="tpl-setadmin">
+  <div class="page" id="page-setadmin">
+    <div class="page-title">&#128737; Set Admin</div>
+    <div class="page-sub">Kelola data admin server Dewata Nation RP.</div>
+
+    <!-- Form card -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">&#128737; Set / Update Admin</div>
+
+      <!-- Admin info preview -->
+      <div id="sa-info-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:10px;font-weight:600">Info Admin Saat Ini</div>
+        <div id="sa-info-content" style="display:flex;flex-wrap:wrap;gap:10px"></div>
+      </div>
+
+      <div class="input-row">
+        <div class="form-group">
+          <label>Username (Name)</label>
+          <input type="text" id="sa-user" placeholder="Username player..." oninput="clearSaInfo()"/>
+        </div>
+        <div class="form-group">
+          <label>Level Admin (pAdmin)</label>
+          <select id="sa-level">
+            <option value="1" >1  — Admin Trial</option>
+            <option value="2" >2  — Admin</option>
+            <option value="3" >3  — Admin</option>
+            <option value="4" >4  — Admin</option>
+            <option value="5" >5  — Admin</option>
+            <option value="6" >6  — Admin</option>
+            <option value="7" >7  — Admin</option>
+            <option value="8" >8  — High Admin</option>
+            <option value="9" >9  — Handle Admin</option>
+            <option value="10">10 — Co-Owner</option>
+            <option value="15">15 — Owner</option>
+            <option value="20">20 — Developer</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Admin Name (pAname)</label>
+          <input type="text" id="sa-aname" placeholder="Nama admin..." maxlength="32"/>
+        </div>
+        <div class="form-group">
+          <label>Admin Key (pAdminKey)</label>
+          <input type="text" id="sa-key" placeholder="Kunci admin..." maxlength="32"/>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+        <button class="btn btn-primary btn-sm" onclick="setAdmin()">&#128737; SET ADMIN</button>
+        <button class="btn btn-copy btn-sm" onclick="checkAdminInfo()">&#128269; Cek Info Admin</button>
+        <button class="btn btn-sm" onclick="removeAdmin()" style="background:rgba(232,48,48,0.12);color:var(--red);border:1px solid rgba(232,48,48,0.3)">&#128465; Hapus Admin</button>
+      </div>
+      <div class="error-msg" id="sa-err"></div>
+      <div class="success-msg" id="sa-ok"></div>
+    </div>
+
+    <!-- Admin list card -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <div class="card-title" style="margin:0">&#128101; Daftar Admin</div>
+        <button class="btn btn-copy btn-sm" onclick="loadAdminList()">&#128260; Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Level</th>
+              <th>Jabatan</th>
+              <th>Admin Name</th>
+              <th>Rep</th>
+              <th>Kick</th>
+              <th>Ban</th>
+              <th>Join</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="sa-list-tbody">
+            <tr><td colspan="9" style="text-align:center;color:var(--textmuted);padding:28px">Klik Refresh untuk memuat...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</template>
+
 <!-- Backup Page (inside content, added via JS showPage) -->
 <template id="tpl-backup">
   <div class="page" id="page-backup">
@@ -2205,11 +2512,11 @@ function toggleSidebar() {
 }
 
 // ─── Pages ─────────────────────────────────────────────────────────────────────
-var pageTitles = {dashboard:'Dashboard',getcord:'Getcord List',set:'Set Menu',adminlog:'Admin Log',inventory:'Inventori Player',backup:'Backup Database'};
+var pageTitles = {dashboard:'Dashboard',getcord:'Getcord List',set:'Set Menu',adminlog:'Admin Log',inventory:'Inventori Player',setadmin:'Set Admin',backup:'Backup Database'};
 
 function showPage(name) {
   // Inject templates on first use
-  if ((name === 'backup' || name === 'inventory') && !document.getElementById('page-'+name)) {
+  if ((name === 'backup' || name === 'inventory' || name === 'setadmin') && !document.getElementById('page-'+name)) {
     var tpl = document.getElementById('tpl-'+name);
     var node = tpl.content.cloneNode(true);
     document.getElementById('content').appendChild(node);
@@ -2219,7 +2526,7 @@ function showPage(name) {
   document.getElementById('page-'+name).classList.add('active');
   document.getElementById('page-title').textContent = pageTitles[name] || name;
   var navItems = document.querySelectorAll('.nav-item');
-  var idx = {dashboard:0,getcord:1,set:2,adminlog:3,inventory:4,backup:5};
+  var idx = {dashboard:0,getcord:1,set:2,adminlog:3,inventory:4,setadmin:5,backup:6};
   if (navItems[idx[name]]) navItems[idx[name]].classList.add('active');
   // Close drawer on mobile after nav
   if (isDrawerMode() && sidebarOpen) {
@@ -2836,6 +3143,157 @@ async function loadInventory() {
   }
 }
 
+// ─── Set Admin ────────────────────────────────────────────────────────────────
+var adminLevelNames = {
+  1:'Admin Trial', 2:'Admin', 3:'Admin', 4:'Admin', 5:'Admin',
+  6:'Admin', 7:'Admin', 8:'High Admin', 9:'Handle Admin',
+  10:'Co-Owner', 15:'Owner', 20:'Developer'
+};
+var adminLevelColors = {
+  1:'var(--textmuted)', 2:'var(--text)', 3:'var(--text)', 4:'var(--text)',
+  5:'var(--text)', 6:'var(--text)', 7:'var(--text)', 8:'#4fc3f7',
+  9:'#29b6f6', 10:'var(--accent)', 15:'#f0a030', 20:'var(--red)'
+};
+
+function clearSaInfo() {
+  document.getElementById('sa-info-wrap').style.display = 'none';
+  resetMsg('sa-err','sa-ok');
+}
+
+async function checkAdminInfo() {
+  var user = document.getElementById('sa-user').value.trim();
+  resetMsg('sa-err','sa-ok');
+  if (!user) { showMsg('sa-err','Username wajib diisi'); return; }
+  try {
+    var r = await fetch('/api/get-admin-info?username='+encodeURIComponent(user));
+    var d = await r.json();
+    if (!r.ok) { showMsg('sa-err', d.error || 'Tidak ditemukan di tabel admin'); return; }
+
+    // Auto-fill form fields
+    document.getElementById('sa-aname').value = d.pAname;
+    document.getElementById('sa-key').value   = d.pAdminKey;
+    var sel = document.getElementById('sa-level');
+    for (var i = 0; i < sel.options.length; i++) {
+      if (parseInt(sel.options[i].value) === d.pAdmin) { sel.selectedIndex = i; break; }
+    }
+
+    var lvlName  = adminLevelNames[d.pAdmin] || ('Level '+d.pAdmin);
+    var lvlColor = adminLevelColors[d.pAdmin] || 'var(--text)';
+    var dateStr  = d.invite_date ? d.invite_date.replace('T',' ').substring(0,16) : '-';
+
+    var content = document.getElementById('sa-info-content');
+    content.innerHTML =
+      saInfoBox('Level', d.pAdmin+' — '+lvlName, lvlColor) +
+      saInfoBox('Admin Name', escHtml(d.pAname), 'var(--accent)') +
+      saInfoBox('Admin Key', escHtml(d.pAdminKey), 'var(--text)') +
+      saInfoBox('Rep', d.pAdmRep, 'var(--green)') +
+      saInfoBox('Kick', d.pAdmKick, 'var(--red)') +
+      saInfoBox('Ban', d.pAdmBan, 'var(--red)') +
+      saInfoBox('Warn', d.pAdmWarn, '#f0a030') +
+      saInfoBox('Mute', d.pAdmMute, 'var(--textmuted)') +
+      saInfoBox('Join', dateStr, 'var(--textmuted)');
+
+    document.getElementById('sa-info-wrap').style.display = 'block';
+  } catch(e) { showMsg('sa-err','Koneksi error'); }
+}
+
+function saInfoBox(label, val, color) {
+  return '<div style="background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:90px;text-align:center">'+
+    '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:4px">'+label+'</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+color+'">'+val+'</div>'+
+  '</div>';
+}
+
+async function setAdmin() {
+  var user  = document.getElementById('sa-user').value.trim();
+  var level = parseInt(document.getElementById('sa-level').value);
+  var aname = document.getElementById('sa-aname').value.trim();
+  var key   = document.getElementById('sa-key').value.trim();
+  resetMsg('sa-err','sa-ok');
+  if (!user)  { showMsg('sa-err','Username wajib diisi'); return; }
+  if (!aname) { showMsg('sa-err','Admin name wajib diisi'); return; }
+  if (!key)   { showMsg('sa-err','Admin key wajib diisi'); return; }
+  try {
+    var r = await fetch('/api/set/admin', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username:user, level:level, aname:aname, key:key})
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('sa-err', d.error || 'Gagal'); return; }
+    var isNew = d.is_new;
+    var msg = (isNew ? 'Admin baru ditambahkan: ' : 'Admin diupdate: ') +
+      user + ' → Level ' + level + ' (' + d.level_name + ')';
+    showMsg('sa-ok', msg);
+    showToast(isNew ? 'Admin berhasil ditambahkan!' : 'Admin berhasil diupdate!', 'success');
+    // Refresh list if visible
+    if (document.getElementById('sa-list-tbody') &&
+        document.getElementById('sa-list-tbody').children.length > 0 &&
+        document.getElementById('sa-list-tbody').children[0].children.length > 1) {
+      loadAdminList();
+    }
+    if (document.getElementById('sa-info-wrap').style.display !== 'none') checkAdminInfo();
+  } catch(e) { showMsg('sa-err','Koneksi error'); }
+}
+
+async function removeAdmin() {
+  var user = document.getElementById('sa-user').value.trim();
+  resetMsg('sa-err','sa-ok');
+  if (!user) { showMsg('sa-err','Username wajib diisi'); return; }
+  if (!confirm('Yakin hapus admin '+user+' dari tabel admin?')) return;
+  try {
+    var r = await fetch('/api/remove-admin', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username:user})
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('sa-err', d.error || 'Gagal hapus'); return; }
+    showMsg('sa-ok', 'Admin '+user+' berhasil dihapus');
+    showToast('Admin dihapus!', 'success');
+    document.getElementById('sa-info-wrap').style.display = 'none';
+    loadAdminList();
+  } catch(e) { showMsg('sa-err','Koneksi error'); }
+}
+
+async function loadAdminList() {
+  var tbody = document.getElementById('sa-list-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--textmuted);padding:20px">Memuat...</td></tr>';
+  try {
+    var r = await fetch('/api/admin-list');
+    var d = await r.json();
+    if (!r.ok || !Array.isArray(d) || d.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--textmuted);padding:20px">Belum ada admin</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.map(function(a) {
+      var lvlName  = adminLevelNames[a.pAdmin] || ('Lv'+a.pAdmin);
+      var lvlColor = adminLevelColors[a.pAdmin] || 'var(--text)';
+      var dateStr  = a.invite_date ? a.invite_date.replace('T',' ').substring(0,10) : '-';
+      return '<tr>'+
+        '<td style="font-weight:600;color:var(--text)">'+escHtml(a.Name)+'</td>'+
+        '<td><span class="badge" style="background:rgba(0,212,255,0.1);color:'+lvlColor+';border:1px solid '+lvlColor+';border-radius:6px;padding:2px 8px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700">'+a.pAdmin+'</span></td>'+
+        '<td style="color:'+lvlColor+';font-size:12px;font-weight:600">'+escHtml(lvlName)+'</td>'+
+        '<td style="color:var(--accent);font-size:13px">'+escHtml(a.pAname)+'</td>'+
+        '<td style="color:var(--green)">'+a.pAdmRep+'</td>'+
+        '<td style="color:var(--red)">'+a.pAdmKick+'</td>'+
+        '<td style="color:var(--red)">'+a.pAdmBan+'</td>'+
+        '<td style="color:var(--textmuted);font-size:12px">'+dateStr+'</td>'+
+        '<td><button class="btn btn-copy btn-sm" style="font-size:11px" onclick="quickEditAdmin(\''+escHtml(a.Name)+'\')">Edit</button></td>'+
+      '</tr>';
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--red);padding:20px">Error memuat daftar admin</td></tr>';
+  }
+}
+
+function quickEditAdmin(name) {
+  document.getElementById('sa-user').value = name;
+  checkAdminInfo();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
 // ─── Backup Export ────────────────────────────────────────────────────────────
 function doExport() {
   var btn = document.getElementById('export-btn');
@@ -3145,6 +3603,10 @@ func main() {
 	mux.HandleFunc("/api/set/vip", authMiddleware(handleSetVip))
 	mux.HandleFunc("/api/get-vip", authMiddleware(handleGetVip))
 	mux.HandleFunc("/api/inventory", authMiddleware(handleGetInventory))
+	mux.HandleFunc("/api/set/admin", authMiddleware(handleSetAdmin))
+	mux.HandleFunc("/api/get-admin-info", authMiddleware(handleGetAdminInfo))
+	mux.HandleFunc("/api/remove-admin", authMiddleware(handleRemoveAdmin))
+	mux.HandleFunc("/api/admin-list", authMiddleware(handleGetAdminList))
 	mux.HandleFunc("/api/set/gun", authMiddleware(handleSetGun))
 	mux.HandleFunc("/api/get-gun-slots", authMiddleware(handleGetGunSlots))
 	mux.HandleFunc("/api/set/veh", authMiddleware(handleSetVeh))
