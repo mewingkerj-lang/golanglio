@@ -936,9 +936,9 @@ const htmlPage = `<!DOCTYPE html>
   --surface2:#141923;
   --surface3:#1a2233;
   --border:#1e2d45;
-  --accent:#e8a020;
-  --accent2:#f0c040;
-  --accentglow:rgba(232,160,32,0.25);
+  --accent:#00d4ff;
+  --accent2:#00b8e6;
+  --accentglow:rgba(0,212,255,0.2);
   --red:#e83030;
   --green:#20c060;
   --blue:#2088e8;
@@ -1014,7 +1014,7 @@ body{background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;min-h
 .nav-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;cursor:pointer;transition:all 0.2s;color:var(--textmuted);margin-bottom:4px;font-weight:500;white-space:nowrap;user-select:none;border:1px solid transparent;-webkit-tap-highlight-color:transparent}
 .nav-item:hover{background:var(--surface3);color:var(--text)}
 .nav-item:active{transform:scale(0.98)}
-.nav-item.active{background:linear-gradient(135deg,rgba(232,160,32,0.15),rgba(240,192,64,0.08));color:var(--accent);border-color:rgba(232,160,32,0.2)}
+.nav-item.active{background:linear-gradient(135deg,rgba(0,212,255,0.12),rgba(0,184,230,0.06));color:var(--accent);border-color:rgba(0,212,255,0.2)}
 .nav-icon{font-size:18px;flex-shrink:0;width:24px;text-align:center}
 .sidebar-footer{padding:14px;border-top:1px solid var(--border);flex-shrink:0}
 .sidebar-user{display:flex;align-items:center;gap:10px;margin-bottom:12px;min-width:0}
@@ -2080,7 +2080,7 @@ async function previewGunSlots() {
           '<div>Kosong</div></div>';
       } else {
         var name = gunNames[gid] || ('ID '+gid);
-        html += '<div style="background:rgba(232,160,32,0.1);border:1px solid rgba(232,160,32,0.3);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--accent);min-width:80px;text-align:center">'+
+        html += '<div style="background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.3);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--accent);min-width:80px;text-align:center">'+
           '<div style="font-weight:700;margin-bottom:2px">Slot '+(i+1)+'</div>'+
           '<div style="color:var(--text);font-size:12px;font-weight:600">'+escHtml(name)+'</div>'+
           '<div style="color:var(--textmuted)">'+am+' peluru</div></div>';
@@ -2175,7 +2175,7 @@ async function previewVehSlots() {
             break;
           }
         }
-        html += '<div style="background:rgba(232,160,32,0.1);border:1px solid rgba(232,160,32,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--accent);min-width:100px;text-align:center">'+
+        html += '<div style="background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--accent);min-width:100px;text-align:center">'+
           '<div style="font-size:22px;margin-bottom:4px">'+getVehIcon(vid)+'</div>'+
           '<div style="font-weight:700;margin-bottom:2px">Slot '+(i+1)+'</div>'+
           '<div style="color:var(--text);font-size:12px;font-weight:600">'+escHtml(vname)+'</div>'+
