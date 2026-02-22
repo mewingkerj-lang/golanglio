@@ -1028,6 +1028,103 @@ func handleGetVip(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, map[string]any{"pVip": pVip, "pVipTime": pVipTime})
 }
 
+// ─── Inventory ────────────────────────────────────────────────────────────────
+
+func handleGetInventory(w http.ResponseWriter, r *http.Request) {
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		jsonResp(w, 400, map[string]string{"error": "username required"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	type InventoryData struct {
+		// Identity
+		PName    string `json:"pName"`
+		PLevel   int    `json:"pLevel"`
+		PExp     int    `json:"pExp"`
+		PJob     int    `json:"pJob"`
+		PMember  int    `json:"pMember"`
+		PRank    int    `json:"pRank"`
+		PVip     int    `json:"pVip"`
+		PVipTime int    `json:"pVipTime"`
+		// Money
+		PCash      int64 `json:"pCash"`
+		PBank      int64 `json:"pBank"`
+		PUangMerah int64 `json:"pUangMerah"`
+		PRouble    int   `json:"pRouble"`
+		PGopay     int   `json:"pGopay"`
+		// Items
+		PBatu      int `json:"pBatu"`
+		PBatuk     int `json:"pBatuk"`
+		PFish      int `json:"pFish"`
+		PPenyu     int `json:"pPenyu"`
+		PDolphin   int `json:"pDolphin"`
+		PHiu       int `json:"pHiu"`
+		PMegalodon int `json:"pMegalodon"`
+		PCaught    int `json:"pCaught"`
+		PPadi      int `json:"pPadi"`
+		PAyam      int `json:"pAyam"`
+		PSemen     int `json:"pSemen"`
+		PEmas      int `json:"pEmas"`
+		PSusu      int `json:"pSusu"`
+		PMinyak    int `json:"pMinyak"`
+		PAyamKemas  int `json:"pAyamKemas"`
+		PAyamPotong int `json:"pAyamPotong"`
+		PAyamHidup  int `json:"pAyamHidup"`
+		PBulu      int `json:"pBulu"`
+		// Account items
+		PDrugs     int `json:"pDrugs"`
+		PMicin     int `json:"pMicin"`
+		PSteroid   int `json:"pSteroid"`
+		PComponent int `json:"pComponent"`
+		PMetall    int `json:"pMetall"`
+		PFood      int `json:"pFood"`
+		PDrink     int `json:"pDrink"`
+		// Weapons & vehicles (raw strings)
+		PGun   string `json:"pGun"`
+		PAmmo  string `json:"pAmmo"`
+		CModel string `json:"cModel"`
+		// Status
+		PHP     float64 `json:"pHP"`
+		PArmour float64 `json:"pArmour"`
+		PSkin   int     `json:"pSkin"`
+		PCS     int     `json:"pCS"`
+		PWanted int     `json:"pWanted"`
+		PPrison int     `json:"pPrison"`
+	}
+
+	var d InventoryData
+	err := db.QueryRow(`SELECT
+		pName,pLevel,pExp,pJob,pMember,pRank,pVip,pVipTime,
+		pCash,pBank,pUangMerah,pRouble,pGopay,
+		pBatu,pBatuk,pFish,pPenyu,pDolphin,pHiu,pMegalodon,pCaught,
+		pPadi,pAyam,pSemen,pEmas,pSusu,pMinyak,pAyamKemas,pAyamPotong,pAyamHidup,pBulu,
+		pDrugs,pMicin,pSteroid,pComponent,pMetall,pFood,pDrink,
+		pGun,pAmmo,cModel,
+		pHP,pArmour,pSkin,pCS,pWanted,pPrison
+		FROM accounts WHERE pName=?`, username).Scan(
+		&d.PName, &d.PLevel, &d.PExp, &d.PJob, &d.PMember, &d.PRank, &d.PVip, &d.PVipTime,
+		&d.PCash, &d.PBank, &d.PUangMerah, &d.PRouble, &d.PGopay,
+		&d.PBatu, &d.PBatuk, &d.PFish, &d.PPenyu, &d.PDolphin, &d.PHiu, &d.PMegalodon, &d.PCaught,
+		&d.PPadi, &d.PAyam, &d.PSemen, &d.PEmas, &d.PSusu, &d.PMinyak, &d.PAyamKemas, &d.PAyamPotong, &d.PAyamHidup, &d.PBulu,
+		&d.PDrugs, &d.PMicin, &d.PSteroid, &d.PComponent, &d.PMetall, &d.PFood, &d.PDrink,
+		&d.PGun, &d.PAmmo, &d.CModel,
+		&d.PHP, &d.PArmour, &d.PSkin, &d.PCS, &d.PWanted, &d.PPrison,
+	)
+	if err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "user tidak ditemukan"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	jsonResp(w, 200, d)
+}
+
 // ─── HTML Page ────────────────────────────────────────────────────────────────
 
 const htmlPage = `<!DOCTYPE html>
@@ -1349,6 +1446,10 @@ tbody tr:hover{background:var(--surface2)}
       <div class="nav-item" onclick="showPage('adminlog')">
         <span class="nav-icon">📋</span>
         <span>Admin Log</span>
+      </div>
+      <div class="nav-item" onclick="showPage('inventory')">
+        <span class="nav-icon">🎒</span>
+        <span>Inventori Player</span>
       </div>
       <div class="nav-item" onclick="showPage('backup')">
         <span class="nav-icon">💾</span>
@@ -1841,6 +1942,82 @@ tbody tr:hover{background:var(--surface2)}
   </div><!-- /main -->
 </div><!-- /app -->
 
+<!-- Inventory Page -->
+<template id="tpl-inventory">
+  <div class="page" id="page-inventory">
+    <div class="page-title">&#127890; Inventori Player</div>
+    <div class="page-sub">Lihat semua data inventori lengkap milik player.</div>
+
+    <!-- Search bar -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+          <label>Username Player</label>
+          <input type="text" id="inv-search" placeholder="Masukkan username..." onkeydown="if(event.key==='Enter')loadInventory()"/>
+        </div>
+        <button class="btn btn-primary btn-sm" style="height:44px;padding:0 24px" onclick="loadInventory()">&#128269; CARI</button>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="inv-result" style="display:none">
+
+      <!-- Profile header -->
+      <div class="card" id="inv-profile-card" style="margin-bottom:16px;background:linear-gradient(135deg,var(--surface),var(--surface2))">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div id="inv-avatar" style="width:60px;height:60px;border-radius:16px;background:var(--accentglow);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-family:Rajdhani,sans-serif;font-size:28px;font-weight:700;color:var(--accent);flex-shrink:0"></div>
+          <div style="flex:1;min-width:0">
+            <div id="inv-name" style="font-family:Rajdhani,sans-serif;font-size:24px;font-weight:700;color:var(--text);letter-spacing:1px"></div>
+            <div id="inv-badges" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px" id="inv-stats"></div>
+        </div>
+      </div>
+
+      <!-- Money -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-title">&#128176; Uang &amp; Wallet</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px" id="inv-money"></div>
+      </div>
+
+      <!-- Weapons -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-title">&#128299; Senjata</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px" id="inv-weapons"></div>
+      </div>
+
+      <!-- Vehicles -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-title">&#128663; Kendaraan</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px" id="inv-vehicles"></div>
+      </div>
+
+      <!-- Items -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-title">&#127873; Item</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px" id="inv-items"></div>
+      </div>
+
+      <!-- Account items -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-title">&#128203; Akun Item</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px" id="inv-account"></div>
+      </div>
+
+    </div><!-- /inv-result -->
+
+    <div id="inv-empty" style="display:none;text-align:center;padding:40px;color:var(--textmuted)">
+      <div style="font-size:48px;margin-bottom:12px">&#128269;</div>
+      <div style="font-family:Rajdhani,sans-serif;font-size:18px">Player tidak ditemukan</div>
+    </div>
+    <div id="inv-loading" style="display:none;text-align:center;padding:40px;color:var(--textmuted)">
+      <div style="font-size:32px;margin-bottom:12px">&#8987;</div>
+      <div>Memuat data inventori...</div>
+    </div>
+    <div id="inv-err-msg" style="display:none" class="error-msg show"></div>
+  </div>
+</template>
+
 <!-- Backup Page (inside content, added via JS showPage) -->
 <template id="tpl-backup">
   <div class="page" id="page-backup">
@@ -2028,12 +2205,12 @@ function toggleSidebar() {
 }
 
 // ─── Pages ─────────────────────────────────────────────────────────────────────
-var pageTitles = {dashboard:'Dashboard',getcord:'Getcord List',set:'Set Menu',adminlog:'Admin Log',backup:'Backup Database'};
+var pageTitles = {dashboard:'Dashboard',getcord:'Getcord List',set:'Set Menu',adminlog:'Admin Log',inventory:'Inventori Player',backup:'Backup Database'};
 
 function showPage(name) {
-  // Inject backup template on first use
-  if (name === 'backup' && !document.getElementById('page-backup')) {
-    var tpl = document.getElementById('tpl-backup');
+  // Inject templates on first use
+  if ((name === 'backup' || name === 'inventory') && !document.getElementById('page-'+name)) {
+    var tpl = document.getElementById('tpl-'+name);
     var node = tpl.content.cloneNode(true);
     document.getElementById('content').appendChild(node);
   }
@@ -2042,7 +2219,7 @@ function showPage(name) {
   document.getElementById('page-'+name).classList.add('active');
   document.getElementById('page-title').textContent = pageTitles[name] || name;
   var navItems = document.querySelectorAll('.nav-item');
-  var idx = {dashboard:0,getcord:1,set:2,adminlog:3,backup:4};
+  var idx = {dashboard:0,getcord:1,set:2,adminlog:3,inventory:4,backup:5};
   if (navItems[idx[name]]) navItems[idx[name]].classList.add('active');
   // Close drawer on mobile after nav
   if (isDrawerMode() && sidebarOpen) {
@@ -2485,6 +2662,180 @@ async function loadAdminLog() {
   }
 }
 
+// ─── Inventory ────────────────────────────────────────────────────────────────
+
+var invWeaponNames = {
+  23:'Silenced Pistol',24:'Desert Eagle',25:'Shotgun',26:'Sawnoff Shotgun',
+  27:'Combat Shotgun',28:'Micro SMG',29:'MP5',30:'AK-47',31:'M4'
+};
+
+var invVipLabel = {0:'Non-VIP',1:'VIP Low',2:'VIP Medium',3:'VIP High'};
+var invVipColor = {0:'var(--textmuted)',1:'#4fc3f7',2:'#29b6f6',3:'#00d4ff'};
+
+function invMoneyCard(label, val, color) {
+  color = color || 'var(--accent)';
+  return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'+
+    '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:4px;font-weight:600">'+label+'</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:'+color+'">'+
+      Number(val).toLocaleString('id-ID')+'</div>'+
+  '</div>';
+}
+
+function invItemCard(label, val, icon, warn) {
+  icon = icon || '&#127873;';
+  var color = val > 0 ? 'var(--text)' : 'var(--textmuted)';
+  var bg = val > 0 ? 'var(--surface2)' : 'var(--surface)';
+  var border = val > 0 ? 'var(--border)' : 'rgba(30,45,69,0.4)';
+  return '<div style="background:'+bg+';border:1px solid '+border+';border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px">'+
+    '<span style="font-size:20px;flex-shrink:0">'+icon+'</span>'+
+    '<div style="min-width:0">'+
+      '<div style="font-size:10px;color:var(--textmuted);letter-spacing:0.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+color+'">'+Number(val).toLocaleString('id-ID')+'</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function invStatBox(label, val, color) {
+  color = color || 'var(--text)';
+  return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;text-align:center;min-width:80px">'+
+    '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:4px">'+label+'</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;color:'+color+'">'+val+'</div>'+
+  '</div>';
+}
+
+async function loadInventory() {
+  var user = document.getElementById('inv-search').value.trim();
+  if (!user) { showToast('Masukkan username player','error'); return; }
+
+  var result  = document.getElementById('inv-result');
+  var empty   = document.getElementById('inv-empty');
+  var loading = document.getElementById('inv-loading');
+  var errMsg  = document.getElementById('inv-err-msg');
+  result.style.display='none'; empty.style.display='none';
+  errMsg.style.display='none'; loading.style.display='block';
+
+  try {
+    var r = await fetch('/api/inventory?username='+encodeURIComponent(user));
+    var d = await r.json();
+    loading.style.display = 'none';
+    if (!r.ok) {
+      if (r.status === 404) { empty.style.display='block'; return; }
+      errMsg.textContent = d.error || 'Gagal memuat data';
+      errMsg.style.display = 'block'; return;
+    }
+
+    // ── Profile header ──
+    document.getElementById('inv-avatar').textContent = d.pName.charAt(0).toUpperCase();
+    document.getElementById('inv-name').textContent = d.pName;
+
+    // Badges
+    var badges = '';
+    var vCol = invVipColor[d.pVip] || 'var(--textmuted)';
+    if (d.pVip > 0) badges += '<span style="background:rgba(0,212,255,0.12);border:1px solid '+vCol+';border-radius:99px;padding:3px 10px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700;color:'+vCol+'">'+escHtml(invVipLabel[d.pVip])+'</span>';
+    if (d.pWanted > 0) badges += '<span style="background:rgba(232,48,48,0.12);border:1px solid var(--red);border-radius:99px;padding:3px 10px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700;color:var(--red)">WANTED '+d.pWanted+'</span>';
+    if (d.pPrison > 0) badges += '<span style="background:rgba(106,128,153,0.15);border:1px solid var(--textmuted);border-radius:99px;padding:3px 10px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700;color:var(--textmuted)">PENJARA</span>';
+    if (d.pCS > 0)     badges += '<span style="background:rgba(32,192,96,0.1);border:1px solid var(--green);border-radius:99px;padding:3px 10px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700;color:var(--green)">Custom Skin</span>';
+    document.getElementById('inv-badges').innerHTML = badges;
+
+    // Stats bar
+    var hpColor = d.pHP >= 70 ? 'var(--green)' : d.pHP >= 30 ? 'var(--accent)' : 'var(--red)';
+    document.getElementById('inv-stats').innerHTML =
+      invStatBox('Level', d.pLevel, 'var(--accent)') +
+      invStatBox('EXP', Number(d.pExp).toLocaleString('id-ID')) +
+      invStatBox('HP', Math.round(d.pHP)+'%', hpColor) +
+      invStatBox('Armour', Math.round(d.pArmour)+'%', 'var(--blue)') +
+      invStatBox('Skin ID', d.pSkin) +
+      (d.pVip > 0 ? invStatBox('VIP Hari', d.pVipTime, vCol) : '');
+
+    // ── Money ──
+    document.getElementById('inv-money').innerHTML =
+      invMoneyCard('pCash (Uang Cash)', d.pCash, '#20c060') +
+      invMoneyCard('pBank (Uang Bank)', d.pBank, '#2088e8') +
+      invMoneyCard('pUangMerah', d.pUangMerah, '#e83030') +
+      invMoneyCard('pRouble (Coin)', d.pRouble, '#00d4ff') +
+      invMoneyCard('pGopay', d.pGopay, '#4fc3f7');
+
+    // ── Weapons ──
+    var guns  = d.pGun.split(',');
+    var ammos = d.pAmmo.split(',');
+    var wHtml = '';
+    var hasWeapon = false;
+    for (var i = 0; i < 13; i++) {
+      var gid = parseInt(guns[i]) || 0;
+      var am  = parseInt(ammos[i]) || 0;
+      if (gid === 0) continue;
+      hasWeapon = true;
+      var wname = invWeaponNames[gid] || ('ID '+gid);
+      wHtml += '<div style="background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.25);border-radius:10px;padding:10px 14px;min-width:130px">'+
+        '<div style="font-size:11px;color:var(--textmuted);margin-bottom:4px">Slot '+(i+1)+' &bull; ID '+gid+'</div>'+
+        '<div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--accent)">&#128299; '+escHtml(wname)+'</div>'+
+        '<div style="font-size:12px;color:var(--textmuted);margin-top:2px">Ammo: <strong style="color:var(--text)">'+am+'</strong></div>'+
+      '</div>';
+    }
+    document.getElementById('inv-weapons').innerHTML = hasWeapon ? wHtml :
+      '<div style="color:var(--textmuted);font-size:13px;padding:8px">Tidak ada senjata</div>';
+
+    // ── Vehicles ──
+    var vehSel = document.getElementById('veh-id');
+    var models = d.cModel.split(',');
+    var vHtml = ''; var hasVeh = false;
+    for (var i = 0; i < 5; i++) {
+      var vid = parseInt(models[i]) || 0;
+      if (vid === 0) continue;
+      hasVeh = true;
+      var vname = 'ID '+vid;
+      if (vehSel) {
+        for (var j = 0; j < vehSel.options.length; j++) {
+          if (parseInt(vehSel.options[j].value) === vid) {
+            vname = vehSel.options[j].text.split(' — ')[1] || vname; break;
+          }
+        }
+      }
+      vHtml += '<div style="background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.25);border-radius:10px;padding:10px 14px;min-width:130px">'+
+        '<div style="font-size:11px;color:var(--textmuted);margin-bottom:4px">Slot '+(i+1)+'</div>'+
+        '<div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--accent)">&#128663; '+escHtml(vname)+'</div>'+
+        '<div style="font-size:12px;color:var(--textmuted);margin-top:2px">ID: '+vid+'</div>'+
+      '</div>';
+    }
+    document.getElementById('inv-vehicles').innerHTML = hasVeh ? vHtml :
+      '<div style="color:var(--textmuted);font-size:13px;padding:8px">Tidak ada kendaraan</div>';
+
+    // ── Items ──
+    var items = [
+      {k:'pBatu',l:'Batu Bersih',i:'&#128296;'},   {k:'pBatuk',l:'Batu Kotor',i:'&#128296;'},
+      {k:'pFish',l:'Ikan',i:'&#127920;'},            {k:'pPenyu',l:'Penyu',i:'&#128034;'},
+      {k:'pDolphin',l:'Dolpin',i:'&#128011;'},       {k:'pHiu',l:'Hiu',i:'&#129416;'},
+      {k:'pMegalodon',l:'Megalodon',i:'&#129416;'},  {k:'pCaught',l:'Umpan Mancing',i:'&#127908;'},
+      {k:'pPadi',l:'Padi',i:'&#127807;'},            {k:'pAyam',l:'Ayam',i:'&#128020;'},
+      {k:'pSemen',l:'Semen',i:'&#129521;'},          {k:'pEmas',l:'Emas',i:'&#129756;'},
+      {k:'pSusu',l:'Susu Sapi',i:'&#127843;'},       {k:'pMinyak',l:'Minyak',i:'&#129695;'},
+      {k:'pAyamKemas',l:'Ayam Kemas',i:'&#128020;'},{k:'pAyamPotong',l:'Ayam Potong',i:'&#128020;'},
+      {k:'pAyamHidup',l:'Ayam Hidup',i:'&#128020;'},{k:'pBulu',l:'Bulu Ayam',i:'&#129413;'},
+    ];
+    var iHtml = '';
+    items.forEach(function(it) { iHtml += invItemCard(it.l, d[it.k], it.i); });
+    document.getElementById('inv-items').innerHTML = iHtml;
+
+    // ── Account items ──
+    var accItems = [
+      {k:'pDrugs',l:'Drugs',i:'&#128138;'},       {k:'pMicin',l:'Marijuana',i:'&#127807;'},
+      {k:'pSteroid',l:'Steroid',i:'&#128138;'},   {k:'pComponent',l:'Component',i:'&#9881;'},
+      {k:'pMetall',l:'Besi/Metal',i:'&#129520;'}, {k:'pFood',l:'Makanan',i:'&#127860;'},
+      {k:'pDrink',l:'Minuman',i:'&#127865;'},
+    ];
+    var aHtml = '';
+    accItems.forEach(function(it) { aHtml += invItemCard(it.l, d[it.k], it.i); });
+    document.getElementById('inv-account').innerHTML = aHtml;
+
+    result.style.display = 'block';
+
+  } catch(e) {
+    loading.style.display = 'none';
+    errMsg.textContent = 'Koneksi error: '+e.message;
+    errMsg.style.display = 'block';
+  }
+}
+
 // ─── Backup Export ────────────────────────────────────────────────────────────
 function doExport() {
   var btn = document.getElementById('export-btn');
@@ -2793,6 +3144,7 @@ func main() {
 	mux.HandleFunc("/api/set/property", authMiddleware(handleSetProperty))
 	mux.HandleFunc("/api/set/vip", authMiddleware(handleSetVip))
 	mux.HandleFunc("/api/get-vip", authMiddleware(handleGetVip))
+	mux.HandleFunc("/api/inventory", authMiddleware(handleGetInventory))
 	mux.HandleFunc("/api/set/gun", authMiddleware(handleSetGun))
 	mux.HandleFunc("/api/get-gun-slots", authMiddleware(handleGetGunSlots))
 	mux.HandleFunc("/api/set/veh", authMiddleware(handleSetVeh))
