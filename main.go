@@ -291,6 +291,69 @@ func handleCheckUser(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, map[string]string{"status": "found"})
 }
 
+// ─── Central Limit Map ────────────────────────────────────────────────────────
+// Single source of truth — edit limit di sini saja
+var columnLimits = map[string]int64{
+	// Money
+	"pCash":      500_000_000,
+	"pBank":      500_000_000,
+	"pUangMerah": 500_000_000,
+	"pRouble":    1_000,
+	// Items
+	"pBatu":      1_000,
+	"pBatuk":     1_000,
+	"pFish":      1_000,
+	"pPenyu":     1_000,
+	"pDolphin":   1_000,
+	"pHiu":       1_000,
+	"pMegalodon": 1_000,
+	"pCaught":    1_000,
+	"pPadi":      1_000,
+	"pAyam":      1_000,
+	"pSemen":     1_000,
+	"pEmas":      1_000,
+	"pSusu":      1_000,
+	"pMinyak":    1_000,
+	"pAyamKemas": 1_000,
+	"pAyamPotong":1_000,
+	"pAyamHidup": 1_000,
+	"pBulu":      1_000,
+	// Account
+	"pDrugs":     500,
+	"pMicin":     500,
+	"pSteroid":   500,
+	"pComponent": 5_000,
+	"pMetall":    5_000,
+	"pFood":      200,
+	"pDrink":     200,
+}
+
+func checkLimit(col string, val int64) error {
+	limit, ok := columnLimits[col]
+	if !ok {
+		return nil // kolom tanpa limit khusus
+	}
+	if val < 0 {
+		return fmt.Errorf("value tidak boleh negatif")
+	}
+	if val > limit {
+		return fmt.Errorf("value melebihi batas maksimal %s untuk kolom %s",
+			formatLimit(limit), col)
+	}
+	return nil
+}
+
+func formatLimit(n int64) string {
+	switch {
+	case n >= 1_000_000_000:
+		return fmt.Sprintf("%g miliar", float64(n)/1_000_000_000)
+	case n >= 1_000_000:
+		return fmt.Sprintf("%g juta", float64(n)/1_000_000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
+}
+
 func handleSetMoney(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", 405)
@@ -310,8 +373,8 @@ func handleSetMoney(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, 400, map[string]string{"error": "type tidak valid"})
 		return
 	}
-	if req.Value > 500000000 {
-		jsonResp(w, 400, map[string]string{"error": "value melebihi 500 juta"})
+	if err := checkLimit(req.Type, req.Value); err != nil {
+		jsonResp(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
 	if db == nil {
@@ -341,7 +404,7 @@ func handleSetItem(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username string `json:"username"`
 		Type     string `json:"type"`
-		Value    int    `json:"value"`
+		Value    int64  `json:"value"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
@@ -358,8 +421,8 @@ func handleSetItem(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, 400, map[string]string{"error": "type tidak valid"})
 		return
 	}
-	if req.Value > 500 {
-		jsonResp(w, 400, map[string]string{"error": "value melebihi 500"})
+	if err := checkLimit(req.Type, req.Value); err != nil {
+		jsonResp(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
 	if db == nil {
@@ -389,7 +452,7 @@ func handleSetAccount(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username string `json:"username"`
 		Type     string `json:"type"`
-		Value    int    `json:"value"`
+		Value    int64  `json:"value"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
@@ -403,8 +466,8 @@ func handleSetAccount(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, 400, map[string]string{"error": "type tidak valid"})
 		return
 	}
-	if req.Value > 700 {
-		jsonResp(w, 400, map[string]string{"error": "value melebihi 700"})
+	if err := checkLimit(req.Type, req.Value); err != nil {
+		jsonResp(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
 	if db == nil {
@@ -1265,17 +1328,18 @@ tbody tr:hover{background:var(--surface2)}
           <div class="card-title">💰 Set Uang Pemain</div>
           <div class="input-row">
             <div class="form-group"><label>Username</label><input type="text" id="money-user" placeholder="Username..."/></div>
-            <div class="form-group"><label>Value</label><input type="number" id="money-val" placeholder="0" max="500000000"/></div>
+            <div class="form-group"><label>Value</label><input type="number" id="money-val" placeholder="0" min="0" max="500000000"/></div>
             <div class="form-group"><label>Type</label>
-              <select id="money-type">
-                <option value="pRouble">pRouble (Donate Coin)</option>
-                <option value="pCash">pCash (Uang Cash)</option>
-                <option value="pBank">pBank (Uang Bank)</option>
-                <option value="pUangMerah">pUangMerah (Uang Merah)</option>
+              <select id="money-type" onchange="updateMoneyMax()">
+                <option value="pCash" data-max="500000000">pCash — Uang Cash (max 500jt)</option>
+                <option value="pBank" data-max="500000000">pBank — Uang Bank (max 500jt)</option>
+                <option value="pUangMerah" data-max="500000000">pUangMerah — Uang Merah (max 500jt)</option>
+                <option value="pRouble" data-max="1000">pRouble — Donate Coin (max 1.000)</option>
               </select>
             </div>
             <button class="btn btn-primary btn-sm" onclick="setMoney()" style="flex-shrink:0;margin-bottom:0">SET</button>
           </div>
+          <div id="money-limit-info" style="font-size:12px;color:var(--textmuted);margin-bottom:4px">Limit: <strong style="color:var(--accent)">500.000.000</strong></div>
           <div class="error-msg" id="money-err"></div>
           <div class="success-msg" id="money-ok"></div>
         </div>
@@ -1285,31 +1349,32 @@ tbody tr:hover{background:var(--surface2)}
           <div class="card-title">🎒 Set Item Pemain</div>
           <div class="input-row">
             <div class="form-group"><label>Username</label><input type="text" id="item-user" placeholder="Username..."/></div>
-            <div class="form-group"><label>Value (max 500)</label><input type="number" id="item-val" placeholder="0" max="500"/></div>
+            <div class="form-group"><label>Value (max 1.000)</label><input type="number" id="item-val" placeholder="0" min="0" max="1000"/></div>
             <div class="form-group"><label>Type</label>
               <select id="item-type">
-                <option value="pBatu">pBatu (Batu Bersih)</option>
-                <option value="pBatuk">pBatuk (Batu Kotor)</option>
-                <option value="pFish">pFish (Ikan)</option>
-                <option value="pPenyu">pPenyu (Penyu)</option>
-                <option value="pDolphin">pDolphin (Dolpin)</option>
-                <option value="pHiu">pHiu (Hiu)</option>
-                <option value="pMegalodon">pMegalodon (Megalodon)</option>
-                <option value="pCaught">pCaught (Umpan Mancing)</option>
-                <option value="pPadi">pPadi (Padi)</option>
-                <option value="pAyam">pAyam (Ayam)</option>
-                <option value="pSemen">pSemen (Semen)</option>
-                <option value="pEmas">pEmas (Emas)</option>
-                <option value="pSusu">pSusu (Susu Sapi)</option>
-                <option value="pMinyak">pMinyak (Minyak)</option>
-                <option value="pAyamKemas">pAyamKemas (Ayam Kemas)</option>
-                <option value="pAyamPotong">pAyamPotong (Ayam Potong)</option>
-                <option value="pAyamHidup">pAyamHidup (Ayam Hidup)</option>
-                <option value="pBulu">pBulu (Bulu Ayam)</option>
+                <option value="pBatu">pBatu — Batu Bersih</option>
+                <option value="pBatuk">pBatuk — Batu Kotor</option>
+                <option value="pFish">pFish — Ikan</option>
+                <option value="pPenyu">pPenyu — Penyu</option>
+                <option value="pDolphin">pDolphin — Dolpin</option>
+                <option value="pHiu">pHiu — Hiu</option>
+                <option value="pMegalodon">pMegalodon — Megalodon</option>
+                <option value="pCaught">pCaught — Umpan Mancing</option>
+                <option value="pPadi">pPadi — Padi</option>
+                <option value="pAyam">pAyam — Ayam</option>
+                <option value="pSemen">pSemen — Semen</option>
+                <option value="pEmas">pEmas — Emas</option>
+                <option value="pSusu">pSusu — Susu Sapi</option>
+                <option value="pMinyak">pMinyak — Minyak</option>
+                <option value="pAyamKemas">pAyamKemas — Ayam Kemas</option>
+                <option value="pAyamPotong">pAyamPotong — Ayam Potong</option>
+                <option value="pAyamHidup">pAyamHidup — Ayam Hidup</option>
+                <option value="pBulu">pBulu — Bulu Ayam</option>
               </select>
             </div>
             <button class="btn btn-primary btn-sm" onclick="setItem()" style="flex-shrink:0;margin-bottom:0">SET</button>
           </div>
+          <div style="font-size:12px;color:var(--textmuted);margin-bottom:4px">Limit semua item: <strong style="color:var(--accent)">1.000</strong></div>
           <div class="error-msg" id="item-err"></div>
           <div class="success-msg" id="item-ok"></div>
         </div>
@@ -1319,20 +1384,21 @@ tbody tr:hover{background:var(--surface2)}
           <div class="card-title">🗃️ Set Akun Pemain</div>
           <div class="input-row">
             <div class="form-group"><label>Username</label><input type="text" id="acc-user" placeholder="Username..."/></div>
-            <div class="form-group"><label>Value (max 700)</label><input type="number" id="acc-val" placeholder="0" max="700"/></div>
+            <div class="form-group"><label>Value</label><input type="number" id="acc-val" placeholder="0" min="0" max="5000"/></div>
             <div class="form-group"><label>Type</label>
-              <select id="acc-type">
-                <option value="pDrugs">pDrugs (Drugs)</option>
-                <option value="pMicin">pMicin (Marijuana)</option>
-                <option value="pSteroid">pSteroid (Steroid)</option>
-                <option value="pComponent">pComponent (Component)</option>
-                <option value="pMetall">pMetall (Besi)</option>
-                <option value="pFood">pFood (Makanan)</option>
-                <option value="pDrink">pDrink (Minuman)</option>
+              <select id="acc-type" onchange="updateAccMax()">
+                <option value="pDrugs"     data-max="500" >pDrugs — Drugs (max 500)</option>
+                <option value="pMicin"     data-max="500" >pMicin — Marijuana (max 500)</option>
+                <option value="pSteroid"   data-max="500" >pSteroid — Steroid (max 500)</option>
+                <option value="pComponent" data-max="5000">pComponent — Component (max 5.000)</option>
+                <option value="pMetall"    data-max="5000">pMetall — Besi (max 5.000)</option>
+                <option value="pFood"      data-max="200" >pFood — Makanan (max 200)</option>
+                <option value="pDrink"     data-max="200" >pDrink — Minuman (max 200)</option>
               </select>
             </div>
             <button class="btn btn-primary btn-sm" onclick="setAccount()" style="flex-shrink:0;margin-bottom:0">SET</button>
           </div>
+          <div id="acc-limit-info" style="font-size:12px;color:var(--textmuted);margin-bottom:4px">Limit: <strong style="color:var(--accent)" id="acc-limit-val">500</strong></div>
           <div class="error-msg" id="acc-err"></div>
           <div class="success-msg" id="acc-ok"></div>
         </div>
@@ -1866,60 +1932,97 @@ async function deleteGetcord(id, btn) {
 }
 
 // ─── Set Money ────────────────────────────────────────────────────────────────
+// ─── Limit helpers (mirror of Go columnLimits) ────────────────────────────────
+var colLimits = {
+  pCash:500000000, pBank:500000000, pUangMerah:500000000, pRouble:1000,
+  pBatu:1000, pBatuk:1000, pFish:1000, pPenyu:1000, pDolphin:1000,
+  pHiu:1000, pMegalodon:1000, pCaught:1000, pPadi:1000, pAyam:1000,
+  pSemen:1000, pEmas:1000, pSusu:1000, pMinyak:1000, pAyamKemas:1000,
+  pAyamPotong:1000, pAyamHidup:1000, pBulu:1000,
+  pDrugs:500, pMicin:500, pSteroid:500,
+  pComponent:5000, pMetall:5000, pFood:200, pDrink:200
+};
+
+function fmtLimit(n) {
+  if (n >= 1000000000) return (n/1000000000).toFixed(0)+' miliar';
+  if (n >= 1000000)    return (n/1000000).toFixed(0)+' juta';
+  if (n >= 1000)       return n.toLocaleString('id-ID');
+  return String(n);
+}
+
+function updateMoneyMax() {
+  var sel = document.getElementById('money-type');
+  var opt = sel.options[sel.selectedIndex];
+  var max = parseInt(opt.getAttribute('data-max')) || 500000000;
+  document.getElementById('money-val').max = max;
+  document.getElementById('money-limit-info').innerHTML =
+    'Limit: <strong style="color:var(--accent)">'+fmtLimit(max)+'</strong>';
+}
+
+function updateAccMax() {
+  var sel = document.getElementById('acc-type');
+  var opt = sel.options[sel.selectedIndex];
+  var max = parseInt(opt.getAttribute('data-max')) || 500;
+  document.getElementById('acc-val').max = max;
+  document.getElementById('acc-limit-val').textContent = fmtLimit(max);
+}
+
 async function setMoney() {
-  const user = document.getElementById('money-user').value.trim();
-  const val = parseInt(document.getElementById('money-val').value);
-  const type = document.getElementById('money-type').value;
+  var user = document.getElementById('money-user').value.trim();
+  var val = parseInt(document.getElementById('money-val').value);
+  var type = document.getElementById('money-type').value;
+  var limit = colLimits[type] || 500000000;
   resetMsg('money-err','money-ok');
   if (!user) { showMsg('money-err','Username wajib diisi'); return; }
   if (isNaN(val) || val < 0) { showMsg('money-err','Value tidak valid'); return; }
-  if (val > 500000000) { showMsg('money-err','Value melebihi 500 juta'); return; }
+  if (val > limit) { showMsg('money-err','Value melebihi batas '+fmtLimit(limit)+' untuk '+type); return; }
   try {
-    const r = await fetch('/api/set/money',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,type,value:val})});
-    const d = await r.json();
+    var r = await fetch('/api/set/money',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,type:type,value:val})});
+    var d = await r.json();
     if (!r.ok) { showMsg('money-err', d.error||'Gagal'); return; }
-    showMsg('money-ok','Berhasil set '+type+' untuk '+user+' = '+val);
+    showMsg('money-ok','Berhasil set '+type+' untuk '+user+' = '+val.toLocaleString('id-ID'));
     showToast('Berhasil!','success');
-  } catch { showMsg('money-err','Koneksi error'); }
+  } catch(e) { showMsg('money-err','Koneksi error'); }
 }
 
 // ─── Set Item ─────────────────────────────────────────────────────────────────
 async function setItem() {
-  const user = document.getElementById('item-user').value.trim();
-  const val = parseInt(document.getElementById('item-val').value);
-  const type = document.getElementById('item-type').value;
+  var user = document.getElementById('item-user').value.trim();
+  var val = parseInt(document.getElementById('item-val').value);
+  var type = document.getElementById('item-type').value;
+  var limit = colLimits[type] || 1000;
   resetMsg('item-err','item-ok');
   if (!user) { showMsg('item-err','Username wajib diisi'); return; }
   if (isNaN(val) || val < 0) { showMsg('item-err','Value tidak valid'); return; }
-  if (val > 500) { showMsg('item-err','Value melebihi 500'); return; }
+  if (val > limit) { showMsg('item-err','Value melebihi batas '+fmtLimit(limit)+' untuk '+type); return; }
   try {
-    const r = await fetch('/api/set/item',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,type,value:val})});
-    const d = await r.json();
+    var r = await fetch('/api/set/item',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,type:type,value:val})});
+    var d = await r.json();
     if (!r.ok) { showMsg('item-err', d.error||'Gagal'); return; }
-    showMsg('item-ok','Berhasil set '+type+' untuk '+user+' = '+val);
+    showMsg('item-ok','Berhasil set '+type+' untuk '+user+' = '+val.toLocaleString('id-ID'));
     showToast('Berhasil!','success');
-  } catch { showMsg('item-err','Koneksi error'); }
+  } catch(e) { showMsg('item-err','Koneksi error'); }
 }
 
 // ─── Set Account ──────────────────────────────────────────────────────────────
 async function setAccount() {
-  const user = document.getElementById('acc-user').value.trim();
-  const val = parseInt(document.getElementById('acc-val').value);
-  const type = document.getElementById('acc-type').value;
+  var user = document.getElementById('acc-user').value.trim();
+  var val = parseInt(document.getElementById('acc-val').value);
+  var type = document.getElementById('acc-type').value;
+  var limit = colLimits[type] || 500;
   resetMsg('acc-err','acc-ok');
   if (!user) { showMsg('acc-err','Username wajib diisi'); return; }
   if (isNaN(val) || val < 0) { showMsg('acc-err','Value tidak valid'); return; }
-  if (val > 700) { showMsg('acc-err','Value melebihi 700'); return; }
+  if (val > limit) { showMsg('acc-err','Value melebihi batas '+fmtLimit(limit)+' untuk '+type); return; }
   try {
-    const r = await fetch('/api/set/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,type,value:val})});
-    const d = await r.json();
+    var r = await fetch('/api/set/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,type:type,value:val})});
+    var d = await r.json();
     if (!r.ok) { showMsg('acc-err', d.error||'Gagal'); return; }
-    showMsg('acc-ok','Berhasil set '+type+' untuk '+user+' = '+val);
+    showMsg('acc-ok','Berhasil set '+type+' untuk '+user+' = '+val.toLocaleString('id-ID'));
     showToast('Berhasil!','success');
-  } catch { showMsg('acc-err','Koneksi error'); }
+  } catch(e) { showMsg('acc-err','Koneksi error'); }
 }
 
-// ─── Set Property ─────────────────────────────────────────────────────────────
 async function setProp(type, userEl, valEl, okEl, errEl) {
   const user = document.getElementById(userEl).value.trim();
   let val = document.getElementById(valEl).value;
