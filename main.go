@@ -1441,7 +1441,365 @@ func handleGetAdminList(w http.ResponseWriter, r *http.Request) {
 	jsonResp(w, 200, list)
 }
 
+// ─── Punishment: Off Jail ─────────────────────────────────────────────────────
 
+func handleOffJail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+		Minutes  int    `json:"minutes"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if strings.TrimSpace(req.Username) == "" {
+		jsonResp(w, 400, map[string]string{"error": "username wajib diisi"})
+		return
+	}
+	if req.Minutes < 10 || req.Minutes > 300 {
+		jsonResp(w, 400, map[string]string{"error": "durasi harus antara 10 dan 300 menit"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	// Check player exists + get current pPrison
+	var pID int
+	var pPrison int
+	err := db.QueryRow("SELECT pID, pPrison FROM accounts WHERE pName=? LIMIT 1", req.Username).Scan(&pID, &pPrison)
+	if err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "pemain tidak ditemukan"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "db error: " + err.Error()})
+		return
+	}
+
+	// Check if player is admin
+	var adminName string
+	isAdmin := db.QueryRow("SELECT Name FROM admin WHERE Name=? LIMIT 1", req.Username).Scan(&adminName) == nil
+	if isAdmin {
+		jsonResp(w, 400, map[string]string{"error": "pemain ini adalah admin, tidak bisa dipenjara"})
+		return
+	}
+
+	// Check if already in jail
+	if pPrison > 0 {
+		remaining := pPrison / 60
+		jsonResp(w, 400, map[string]string{"error": fmt.Sprintf("pemain sudah di penjara (%d menit tersisa)", remaining)})
+		return
+	}
+
+	// Set pPrison in seconds, pMestoPrison = 0
+	seconds := req.Minutes * 60
+	_, err = db.Exec("UPDATE accounts SET pPrison=?, pMestoPrison=0 WHERE pName=?", seconds, req.Username)
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal update: " + err.Error()})
+		return
+	}
+
+	// Increment pAdmPrison on admin who did the action
+	s, _ := getSession(r)
+	db.Exec("UPDATE admin SET pAdmPrison=pAdmPrison+1 WHERE Name=?", s.Username)
+	logAction(s.Username, fmt.Sprintf("OffJail %s selama %d menit (%d detik)", req.Username, req.Minutes, seconds))
+
+	jsonResp(w, 200, map[string]any{
+		"status":   "ok",
+		"username": req.Username,
+		"minutes":  req.Minutes,
+		"seconds":  seconds,
+	})
+}
+
+func handleFreeJail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if strings.TrimSpace(req.Username) == "" {
+		jsonResp(w, 400, map[string]string{"error": "username wajib diisi"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	var pPrison int
+	err := db.QueryRow("SELECT pPrison FROM accounts WHERE pName=? LIMIT 1", req.Username).Scan(&pPrison)
+	if err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "pemain tidak ditemukan"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "db error: " + err.Error()})
+		return
+	}
+	if pPrison == 0 {
+		jsonResp(w, 400, map[string]string{"error": "pemain tidak sedang di penjara"})
+		return
+	}
+
+	_, err = db.Exec("UPDATE accounts SET pPrison=0, pMestoPrison=0 WHERE pName=?", req.Username)
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal update: " + err.Error()})
+		return
+	}
+
+	s, _ := getSession(r)
+	logAction(s.Username, fmt.Sprintf("FreeJail %s (sisa %d detik dibebaskan)", req.Username, pPrison))
+
+	jsonResp(w, 200, map[string]any{
+		"status":            "ok",
+		"username":          req.Username,
+		"freed_seconds":     pPrison,
+		"freed_minutes":     pPrison / 60,
+	})
+}
+
+func handleGetPrisonStatus(w http.ResponseWriter, r *http.Request) {
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		jsonResp(w, 400, map[string]string{"error": "username required"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+	var pPrison, pWanted int
+	err := db.QueryRow("SELECT pPrison, pWanted FROM accounts WHERE pName=? LIMIT 1", username).Scan(&pPrison, &pWanted)
+	if err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "pemain tidak ditemukan"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	jsonResp(w, 200, map[string]any{
+		"username": username,
+		"pPrison":  pPrison,
+		"minutes":  pPrison / 60,
+		"pWanted":  pWanted,
+		"in_jail":  pPrison > 0,
+	})
+}
+
+// ─── Punishment: Off Ban ──────────────────────────────────────────────────────
+
+func handleOffBan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+		Days     int    `json:"days"`
+		Reason   string `json:"reason"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if strings.TrimSpace(req.Username) == "" {
+		jsonResp(w, 400, map[string]string{"error": "username wajib diisi"})
+		return
+	}
+	if req.Days < 1 || req.Days > 30 {
+		jsonResp(w, 400, map[string]string{"error": "durasi ban harus antara 1 dan 30 hari"})
+		return
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		reason = "Melanggar peraturan server"
+	}
+	if len(reason) > 128 {
+		jsonResp(w, 400, map[string]string{"error": "alasan maksimal 128 karakter"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	// Cek player exist di accounts
+	var pID int
+	err := db.QueryRow("SELECT pID FROM accounts WHERE pName=? LIMIT 1", req.Username).Scan(&pID)
+	if err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "pemain tidak ditemukan"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "db error: " + err.Error()})
+		return
+	}
+
+	// Cek apakah player adalah admin
+	var adminName string
+	if db.QueryRow("SELECT Name FROM admin WHERE Name=? LIMIT 1", req.Username).Scan(&adminName) == nil {
+		jsonResp(w, 400, map[string]string{"error": "pemain ini adalah admin, tidak bisa di-ban"})
+		return
+	}
+
+	// Cek apakah sudah di-ban aktif di banlog
+	var existID int
+	alreadyBanned := db.QueryRow(
+		"SELECT id FROM banlog WHERE nameplayer=? AND lockstate='1' LIMIT 1", req.Username,
+	).Scan(&existID) == nil
+	if alreadyBanned {
+		jsonResp(w, 400, map[string]string{"error": "pemain sudah dalam status banned"})
+		return
+	}
+
+	// Hitung expire: Unix timestamp = sekarang + (86400 * hari)
+	expireUnix := time.Now().Unix() + int64(86400*req.Days)
+	expireTime := time.Unix(expireUnix, 0).Format("2006-01-02 15:04:05")
+	banDate := time.Now().Format("2006-01-02 15:04:05")
+
+	s, _ := getSession(r)
+	adminWho := s.Username
+
+	// INSERT ke banlog — kolom sesuai struktur standar BlockAccounts SAMP
+	_, err = db.Exec(
+		`INSERT INTO banlog (nameplayer, reason, bannedby, lockstate, bandate, expiredate, expireunix)
+		 VALUES (?, ?, ?, '1', ?, ?, ?)`,
+		req.Username, reason, adminWho, banDate, expireTime, expireUnix,
+	)
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal insert banlog: " + err.Error()})
+		return
+	}
+
+	// Increment pAdmBan di tabel admin
+	db.Exec("UPDATE admin SET pAdmBan=pAdmBan+1 WHERE Name=?", adminWho)
+
+	logAction(adminWho, fmt.Sprintf("OffBan %s selama %d hari | alasan: %s", req.Username, req.Days, reason))
+
+	jsonResp(w, 200, map[string]any{
+		"status":      "banned",
+		"username":    req.Username,
+		"days":        req.Days,
+		"reason":      reason,
+		"banned_by":   adminWho,
+		"expire_date": expireTime,
+		"expire_unix": expireUnix,
+	})
+}
+
+func handleUnban(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if strings.TrimSpace(req.Username) == "" {
+		jsonResp(w, 400, map[string]string{"error": "username wajib diisi"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	// Cek apakah ada ban aktif
+	var banID int
+	err := db.QueryRow(
+		"SELECT id FROM banlog WHERE nameplayer=? AND lockstate='1' LIMIT 1", req.Username,
+	).Scan(&banID)
+	if err == sql.ErrNoRows {
+		jsonResp(w, 404, map[string]string{"error": "pemain tidak dalam status banned"})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "db error: " + err.Error()})
+		return
+	}
+
+	// Set lockstate = 0 (unban)
+	_, err = db.Exec("UPDATE banlog SET lockstate='0' WHERE nameplayer=? AND lockstate='1'", req.Username)
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal unban: " + err.Error()})
+		return
+	}
+
+	s, _ := getSession(r)
+	logAction(s.Username, fmt.Sprintf("Unban %s", req.Username))
+
+	jsonResp(w, 200, map[string]any{
+		"status":   "unbanned",
+		"username": req.Username,
+	})
+}
+
+func handleGetBanStatus(w http.ResponseWriter, r *http.Request) {
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		jsonResp(w, 400, map[string]string{"error": "username required"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	type BanInfo struct {
+		IsBanned   bool   `json:"is_banned"`
+		Reason     string `json:"reason"`
+		BannedBy   string `json:"banned_by"`
+		BanDate    string `json:"ban_date"`
+		ExpireDate string `json:"expire_date"`
+		ExpireUnix int64  `json:"expire_unix"`
+		DaysLeft   int    `json:"days_left"`
+	}
+
+	var info BanInfo
+	var rawBanDate, rawExpire []byte
+	err := db.QueryRow(
+		`SELECT reason, bannedby, bandate, expiredate, expireunix
+		 FROM banlog WHERE nameplayer=? AND lockstate='1'
+		 ORDER BY id DESC LIMIT 1`, username,
+	).Scan(&info.Reason, &info.BannedBy, &rawBanDate, &rawExpire, &info.ExpireUnix)
+
+	if err == sql.ErrNoRows {
+		// Not banned — also check if player exists
+		var pID int
+		if db.QueryRow("SELECT pID FROM accounts WHERE pName=? LIMIT 1", username).Scan(&pID) == sql.ErrNoRows {
+			jsonResp(w, 404, map[string]string{"error": "pemain tidak ditemukan"})
+			return
+		}
+		jsonResp(w, 200, BanInfo{IsBanned: false})
+		return
+	} else if err != nil {
+		jsonResp(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	info.IsBanned = true
+	info.BanDate = string(rawBanDate)
+	info.ExpireDate = string(rawExpire)
+	// Calculate days left from expireUnix
+	secsLeft := info.ExpireUnix - time.Now().Unix()
+	if secsLeft > 0 {
+		info.DaysLeft = int(secsLeft/86400) + 1
+	}
+	jsonResp(w, 200, info)
+}
 
 // ─── Property: Add Bisnis & Add House ────────────────────────────────────────
 
@@ -2318,6 +2676,10 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
         <span class="nav-icon">🏠</span>
         <span>Add Property</span>
       </div>
+      <div class="nav-item" onclick="showPage('punishment')">
+        <span class="nav-icon">⛓️</span>
+        <span>Punishment</span>
+      </div>
       <div class="nav-item" onclick="showPage('backup')">
         <span class="nav-icon">💾</span>
         <span>Backup Database</span>
@@ -3145,6 +3507,168 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
   </div>
 </template>
 
+<!-- Punishment Page -->
+<template id="tpl-punishment">
+  <div class="page" id="page-punishment">
+    <div class="page-title">&#9939; Punishment</div>
+    <div class="page-sub">Kelola hukuman penjara (off-jail) untuk pemain offline.</div>
+
+    <!-- Player status panel -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">&#128269; Cek Status Pemain</div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+          <label>Username Player</label>
+          <input type="text" id="pun-user" placeholder="Masukkan username..." oninput="clearPunInfo()" onkeydown="if(event.key==='Enter')checkPunStatus()"/>
+        </div>
+        <button class="btn btn-copy btn-sm" style="height:44px;padding:0 20px" onclick="checkPunStatus()">&#128269; CEK STATUS</button>
+      </div>
+
+      <!-- Status info panel -->
+      <div id="pun-status-panel" style="display:none;margin-top:16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:12px;font-weight:700">Status Saat Ini</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px" id="pun-status-content"></div>
+      </div>
+    </div>
+
+    <!-- Off Jail card -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">&#9939; Set Penjara (Off Jail)</div>
+      <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8">
+        &#9432;&nbsp; Sesuai command <code style="color:var(--accent3);background:var(--surface3);padding:2px 6px;border-radius:4px">/offjail</code> — hanya untuk <strong>pemain offline</strong>.
+        Durasi: <strong style="color:var(--accent3)">10–300 menit</strong>. Pemain yang sudah di penjara tidak bisa di-jail lagi.
+        <br/>Admin yang diset tidak bisa dipenjara.
+      </div>
+
+      <!-- Duration presets -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:700">Preset Durasi</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <button class="btn btn-copy btn-sm" onclick="setPunMins(10)">10 Menit</button>
+          <button class="btn btn-copy btn-sm" onclick="setPunMins(30)">30 Menit</button>
+          <button class="btn btn-copy btn-sm" onclick="setPunMins(60)">1 Jam</button>
+          <button class="btn btn-copy btn-sm" onclick="setPunMins(120)">2 Jam</button>
+          <button class="btn btn-copy btn-sm" onclick="setPunMins(180)">3 Jam</button>
+          <button class="btn btn-copy btn-sm" onclick="setPunMins(300)">5 Jam (MAX)</button>
+        </div>
+      </div>
+
+      <div class="input-row" style="grid-template-columns:1fr 1fr auto">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Username Player</label>
+          <input type="text" id="jail-user" placeholder="Username pemain..."/>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Durasi (menit) — min 10, max 300</label>
+          <input type="number" id="jail-mins" placeholder="60" min="10" max="300"/>
+        </div>
+        <button class="btn btn-primary btn-sm" style="height:44px;padding:0 20px;background:linear-gradient(135deg,#7c3aed,#a855f7)" onclick="doOffJail()">&#9939; JAIL</button>
+      </div>
+      <div class="error-msg"   id="jail-err"></div>
+      <div class="success-msg" id="jail-ok"></div>
+    </div>
+
+    <!-- Free Jail card -->
+    <div class="card">
+      <div class="card-title">&#128275; Bebaskan dari Penjara</div>
+      <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2)">
+        &#9432;&nbsp; Bebaskan pemain yang sedang di penjara. Set <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">pPrison=0</code> dan <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">pMestoPrison=0</code>.
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+          <label>Username Player</label>
+          <input type="text" id="free-user" placeholder="Username pemain..."/>
+        </div>
+        <button class="btn btn-sm" style="height:44px;padding:0 20px;background:linear-gradient(135deg,#059669,var(--green));color:#fff;border:none" onclick="doFreeJail()">&#128275; BEBASKAN</button>
+      </div>
+      <div class="error-msg"   id="free-err"></div>
+      <div class="success-msg" id="free-ok"></div>
+    </div>
+
+    <!-- divider -->
+    <div class="glow-line" style="margin:4px 0 20px"></div>
+    <div style="font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700;color:var(--accent3);letter-spacing:2px;margin-bottom:16px;text-transform:uppercase">&#128683; Sistem Ban</div>
+
+    <!-- Cek Status Ban -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">&#128269; Cek Status Ban</div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+          <label>Username Player</label>
+          <input type="text" id="ban-search" placeholder="Masukkan username..." oninput="clearBanInfo()" onkeydown="if(event.key==='Enter')checkBanStatus()"/>
+        </div>
+        <button class="btn btn-copy btn-sm" style="height:44px;padding:0 20px" onclick="checkBanStatus()">&#128269; CEK BAN</button>
+      </div>
+      <!-- Ban status panel -->
+      <div id="ban-status-panel" style="display:none;margin-top:16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:12px;font-weight:700">Status Ban Saat Ini</div>
+        <div id="ban-status-content" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px"></div>
+        <div id="ban-detail-wrap" style="display:none;background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13px;line-height:1.9">
+          <div id="ban-detail-content"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Off Ban card -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">&#128683; Set Ban (Off Ban)</div>
+      <div style="background:rgba(244,63,94,0.06);border:1px solid rgba(244,63,94,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8">
+        &#9432;&nbsp; Sesuai command <code style="color:#f43f5e;background:var(--surface3);padding:2px 6px;border-radius:4px">/offban</code> — hanya untuk <strong>pemain offline</strong>.
+        Durasi: <strong style="color:#f43f5e">1–30 hari</strong>. Admin tidak bisa di-ban. Pemain yang sudah di-ban tidak bisa di-ban lagi.
+      </div>
+
+      <!-- Preset durasi -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:700">Preset Durasi Ban</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <button class="btn btn-copy btn-sm" onclick="setBanDays(1)">1 Hari</button>
+          <button class="btn btn-copy btn-sm" onclick="setBanDays(3)">3 Hari</button>
+          <button class="btn btn-copy btn-sm" onclick="setBanDays(7)">7 Hari</button>
+          <button class="btn btn-copy btn-sm" onclick="setBanDays(14)">14 Hari</button>
+          <button class="btn btn-copy btn-sm" onclick="setBanDays(30)" style="border-color:rgba(244,63,94,0.4);color:#f43f5e">30 Hari (MAX)</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Username Player</label>
+          <input type="text" id="ban-user" placeholder="Username pemain..."/>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Durasi (hari) — min 1, max 30</label>
+          <input type="number" id="ban-days" placeholder="7" min="1" max="30"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Alasan Ban (opsional)</label>
+        <input type="text" id="ban-reason" placeholder="contoh: Cheating, bug abuse, dll..." maxlength="128"/>
+      </div>
+
+      <button class="btn btn-sm" style="background:linear-gradient(135deg,#be123c,var(--red));color:#fff;border:none;padding:10px 24px;max-width:200px" onclick="doOffBan()">&#128683; BAN PEMAIN</button>
+      <div class="error-msg"   id="ban-err"></div>
+      <div class="success-msg" id="ban-ok"></div>
+    </div>
+
+    <!-- Unban card -->
+    <div class="card">
+      <div class="card-title">&#9989; Unban Pemain</div>
+      <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2)">
+        &#9432;&nbsp; Set <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">lockstate='0'</code> pada record ban aktif pemain di tabel <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">banlog</code>.
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+          <label>Username Player</label>
+          <input type="text" id="unban-user" placeholder="Username pemain..."/>
+        </div>
+        <button class="btn btn-sm" style="height:44px;padding:0 20px;background:linear-gradient(135deg,#059669,var(--green));color:#fff;border:none" onclick="doUnban()">&#9989; UNBAN</button>
+      </div>
+      <div class="error-msg"   id="unban-err"></div>
+      <div class="success-msg" id="unban-ok"></div>
+    </div>
+
+  </div>
+</template>
+
 <!-- Backup Page (inside content, added via JS showPage) -->
 <template id="tpl-backup">
   <div class="page" id="page-backup">
@@ -3332,10 +3856,10 @@ function toggleSidebar() {
 }
 
 // ─── Pages ─────────────────────────────────────────────────────────────────────
-var pageTitles = {dashboard:'Dashboard',getcord:'Getcord List',set:'Set Menu',adminlog:'Admin Log',inventory:'Inventori Player',setadmin:'Set Admin',property:'Add Property',backup:'Backup Database'};
+var pageTitles = {dashboard:'Dashboard',getcord:'Getcord List',set:'Set Menu',adminlog:'Admin Log',inventory:'Inventori Player',setadmin:'Set Admin',property:'Add Property',punishment:'Punishment',backup:'Backup Database'};
 
 function showPage(name) {
-  if (['backup','inventory','setadmin','property'].indexOf(name) !== -1 && !document.getElementById('page-'+name)) {
+  if (['backup','inventory','setadmin','property','punishment'].indexOf(name) !== -1 && !document.getElementById('page-'+name)) {
     var tpl = document.getElementById('tpl-'+name);
     var node = tpl.content.cloneNode(true);
     document.getElementById('content').appendChild(node);
@@ -3345,7 +3869,7 @@ function showPage(name) {
   document.getElementById('page-'+name).classList.add('active');
   document.getElementById('page-title').textContent = pageTitles[name] || name;
   var navItems = document.querySelectorAll('.nav-item');
-  var idx = {dashboard:0,getcord:1,set:2,adminlog:3,inventory:4,setadmin:5,property:6,backup:7};
+  var idx = {dashboard:0,getcord:1,set:2,adminlog:3,inventory:4,setadmin:5,property:6,punishment:7,backup:8};
   if (navItems[idx[name]]) navItems[idx[name]].classList.add('active');
   if (isDrawerMode() && sidebarOpen) {
     sidebarOpen = false;
@@ -3962,6 +4486,239 @@ async function loadInventory() {
   }
 }
 
+// ─── Punishment ───────────────────────────────────────────────────────────────
+
+function clearPunInfo() {
+  document.getElementById('pun-status-panel').style.display = 'none';
+}
+
+function setPunMins(n) {
+  document.getElementById('jail-mins').value = n;
+  // Also sync username from cek field if filled
+  var user = document.getElementById('pun-user').value.trim();
+  if (user) document.getElementById('jail-user').value = user;
+}
+
+function punStatBox(label, val, color) {
+  color = color || 'var(--text)';
+  return '<div style="background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:100px;text-align:center">'+
+    '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:4px">'+label+'</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+color+'">'+val+'</div>'+
+  '</div>';
+}
+
+async function checkPunStatus() {
+  var user = document.getElementById('pun-user').value.trim();
+  if (!user) { showToast('Masukkan username player', 'error'); return; }
+
+  try {
+    var r = await fetch('/api/punishment/status?username='+encodeURIComponent(user));
+    var d = await r.json();
+    if (!r.ok) {
+      showToast(d.error || 'Tidak ditemukan', 'error');
+      document.getElementById('pun-status-panel').style.display = 'none';
+      return;
+    }
+
+    var jailColor   = d.in_jail ? 'var(--red)' : 'var(--green)';
+    var jailLabel   = d.in_jail ? 'DI PENJARA' : 'BEBAS';
+    var minutesStr  = d.in_jail ? d.minutes + ' menit tersisa' : '0 menit';
+    var wantedColor = d.pWanted > 0 ? 'var(--yellow)' : 'var(--textmuted)';
+
+    document.getElementById('pun-status-content').innerHTML =
+      punStatBox('Status', jailLabel, jailColor) +
+      punStatBox('Sisa Waktu', minutesStr, jailColor) +
+      punStatBox('pPrison (detik)', d.pPrison, d.in_jail ? 'var(--red)' : 'var(--textmuted)') +
+      punStatBox('Wanted', d.pWanted > 0 ? 'Bintang '+d.pWanted : 'Aman', wantedColor);
+
+    document.getElementById('pun-status-panel').style.display = 'block';
+
+    // Auto-fill jail form username
+    document.getElementById('jail-user').value = user;
+    document.getElementById('free-user').value = user;
+
+  } catch(e) { showToast('Koneksi error', 'error'); }
+}
+
+async function doOffJail() {
+  var user = document.getElementById('jail-user').value.trim();
+  var mins = parseInt(document.getElementById('jail-mins').value);
+  resetMsg('jail-err', 'jail-ok');
+
+  if (!user) { showMsg('jail-err', 'Username wajib diisi'); return; }
+  if (isNaN(mins) || mins < 10 || mins > 300) {
+    showMsg('jail-err', 'Durasi harus antara 10 - 300 menit'); return;
+  }
+
+  try {
+    var r = await fetch('/api/punishment/jail', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: user, minutes: mins})
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('jail-err', d.error || 'Gagal set penjara'); return; }
+
+    var hrs  = Math.floor(mins / 60);
+    var rem  = mins % 60;
+    var durStr = hrs > 0 ? hrs+'j '+rem+'m' : mins+' menit';
+    showMsg('jail-ok', user + ' berhasil dipenjara selama ' + durStr + ' (' + d.seconds + ' detik)');
+    showToast('&#9939; ' + user + ' dipenjara ' + durStr, 'success');
+    document.getElementById('jail-mins').value = '';
+
+    // Refresh status if panel visible
+    if (document.getElementById('pun-status-panel').style.display !== 'none') {
+      document.getElementById('pun-user').value = user;
+      checkPunStatus();
+    }
+  } catch(e) { showMsg('jail-err', 'Koneksi error'); }
+}
+
+async function doFreeJail() {
+  var user = document.getElementById('free-user').value.trim();
+  resetMsg('free-err', 'free-ok');
+  if (!user) { showMsg('free-err', 'Username wajib diisi'); return; }
+
+  try {
+    var r = await fetch('/api/punishment/free', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: user})
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('free-err', d.error || 'Gagal bebaskan pemain'); return; }
+
+    showMsg('free-ok', user + ' berhasil dibebaskan! (sisa ' + d.freed_minutes + ' menit dihapus)');
+    showToast('&#128275; ' + user + ' dibebaskan dari penjara!', 'success');
+
+    // Refresh status panel
+    if (document.getElementById('pun-status-panel').style.display !== 'none') {
+      document.getElementById('pun-user').value = user;
+      checkPunStatus();
+    }
+  } catch(e) { showMsg('free-err', 'Koneksi error'); }
+}
+
+// ─── Ban JS ────────────────────────────────────────────────────────────────────
+
+function clearBanInfo() {
+  document.getElementById('ban-status-panel').style.display = 'none';
+}
+
+function setBanDays(n) {
+  document.getElementById('ban-days').value = n;
+  var user = document.getElementById('ban-search').value.trim();
+  if (user) document.getElementById('ban-user').value = user;
+}
+
+function banStatBox(label, val, color) {
+  color = color || 'var(--text)';
+  return '<div style="background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:100px;text-align:center">'+
+    '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:4px">'+label+'</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:'+color+'">'+val+'</div>'+
+  '</div>';
+}
+
+async function checkBanStatus() {
+  var user = document.getElementById('ban-search').value.trim();
+  if (!user) { showToast('Masukkan username player', 'error'); return; }
+  try {
+    var r = await fetch('/api/punishment/ban-status?username='+encodeURIComponent(user));
+    var d = await r.json();
+    if (r.status === 404) { showToast(d.error || 'Pemain tidak ditemukan', 'error'); return; }
+    if (!r.ok) { showToast(d.error || 'Error', 'error'); return; }
+
+    var panel   = document.getElementById('ban-status-panel');
+    var content = document.getElementById('ban-status-content');
+    var detail  = document.getElementById('ban-detail-wrap');
+    var detailC = document.getElementById('ban-detail-content');
+
+    if (!d.is_banned) {
+      content.innerHTML = banStatBox('Status', 'BEBAS', 'var(--green)') +
+                          banStatBox('Riwayat Ban', 'Tidak Ada', 'var(--textmuted)');
+      detail.style.display = 'none';
+    } else {
+      var daysLeft = d.days_left || 0;
+      content.innerHTML =
+        banStatBox('Status', 'BANNED', 'var(--red)') +
+        banStatBox('Sisa', daysLeft + ' hari', 'var(--red)') +
+        banStatBox('Di-ban oleh', escHtml(d.banned_by || '-'), 'var(--accent3)');
+
+      detailC.innerHTML =
+        '<div>&#128683; <strong style="color:var(--red)">AKUN DIBLOKIR</strong></div>'+
+        '<div style="color:var(--textmuted)">Alasan: <span style="color:var(--text)">'+escHtml(d.reason || '-')+'</span></div>'+
+        '<div style="color:var(--textmuted)">Tanggal ban: <span style="color:var(--text)">'+escHtml(d.ban_date || '-')+'</span></div>'+
+        '<div style="color:var(--textmuted)">Expire: <span style="color:var(--yellow)">'+escHtml(d.expire_date || '-')+'</span></div>';
+      detail.style.display = 'block';
+    }
+
+    panel.style.display = 'block';
+    // Auto-fill form
+    document.getElementById('ban-user').value   = user;
+    document.getElementById('unban-user').value = user;
+  } catch(e) { showToast('Koneksi error', 'error'); }
+}
+
+async function doOffBan() {
+  var user   = document.getElementById('ban-user').value.trim();
+  var days   = parseInt(document.getElementById('ban-days').value);
+  var reason = document.getElementById('ban-reason').value.trim();
+  resetMsg('ban-err', 'ban-ok');
+
+  if (!user)                              { showMsg('ban-err','Username wajib diisi'); return; }
+  if (isNaN(days) || days < 1 || days > 30) { showMsg('ban-err','Durasi ban harus antara 1 - 30 hari'); return; }
+
+  try {
+    var r = await fetch('/api/punishment/ban', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: user, days: days, reason: reason})
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('ban-err', d.error || 'Gagal ban pemain'); return; }
+
+    showMsg('ban-ok',
+      user + ' berhasil di-ban selama ' + days + ' hari' +
+      (reason ? ' | Alasan: ' + escHtml(reason) : '') +
+      ' | Expire: ' + escHtml(d.expire_date)
+    );
+    showToast('&#128683; ' + user + ' di-ban ' + days + ' hari', 'success');
+    document.getElementById('ban-days').value   = '';
+    document.getElementById('ban-reason').value = '';
+
+    // Refresh ban status panel if open
+    if (document.getElementById('ban-status-panel').style.display !== 'none') {
+      document.getElementById('ban-search').value = user;
+      checkBanStatus();
+    }
+  } catch(e) { showMsg('ban-err', 'Koneksi error'); }
+}
+
+async function doUnban() {
+  var user = document.getElementById('unban-user').value.trim();
+  resetMsg('unban-err', 'unban-ok');
+  if (!user) { showMsg('unban-err', 'Username wajib diisi'); return; }
+
+  try {
+    var r = await fetch('/api/punishment/unban', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: user})
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('unban-err', d.error || 'Gagal unban'); return; }
+
+    showMsg('unban-ok', user + ' berhasil di-unban!');
+    showToast('&#9989; ' + user + ' berhasil di-unban!', 'success');
+
+    // Refresh ban status panel
+    if (document.getElementById('ban-status-panel').style.display !== 'none') {
+      document.getElementById('ban-search').value = user;
+      checkBanStatus();
+    }
+  } catch(e) { showMsg('unban-err', 'Koneksi error'); }
+}
+
 // ─── Set Admin ────────────────────────────────────────────────────────────────
 var adminLevelNames = {
   1:'Admin Trial', 2:'Admin', 3:'Admin', 4:'Admin', 5:'Admin',
@@ -4565,6 +5322,12 @@ func main() {
 	mux.HandleFunc("/api/property/add-bizz", protected(handleAddBizz))
 	mux.HandleFunc("/api/property/add-house",protected(handleAddHouse))
 	mux.HandleFunc("/api/property/stats",    protected(handleGetPropertyStats))
+	mux.HandleFunc("/api/punishment/jail",      protected(handleOffJail))
+	mux.HandleFunc("/api/punishment/free",      protected(handleFreeJail))
+	mux.HandleFunc("/api/punishment/status",    protected(handleGetPrisonStatus))
+	mux.HandleFunc("/api/punishment/ban",       protected(handleOffBan))
+	mux.HandleFunc("/api/punishment/unban",     protected(handleUnban))
+	mux.HandleFunc("/api/punishment/ban-status",protected(handleGetBanStatus))
 
 	// ── Tuned HTTP server ───────────────────────────────────────────────────────
 	port := getEnv("PORT", "8080")
@@ -4587,4 +5350,3 @@ func main() {
 		log.Fatal(err)
 	}
 }
-
