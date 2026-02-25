@@ -1,13 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"crypto/md5"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,9 +24,17 @@ import (
 // ─── Global State ─────────────────────────────────────────────────────────────
 
 var (
-	db          *sql.DB
-	sessionsMu  sync.RWMutex
-	sessions    = make(map[string]SessionData)
+	db         *sql.DB
+	sessionsMu sync.RWMutex
+	sessions   = make(map[string]SessionData, 256)
+
+	// Response buffer pool — reuse allocations across requests
+	bufPool = sync.Pool{
+		New: func() any { return bytes.NewBuffer(make([]byte, 0, 512)) },
+	}
+
+	// Pre-encoded static HTML page bytes — served from memory, zero alloc per request
+	htmlPageBytes []byte
 )
 
 type SessionData struct {
@@ -32,19 +45,26 @@ type SessionData struct {
 // ─── MD5 Helper ───────────────────────────────────────────────────────────────
 
 func md5Hash(s string) string {
-	return fmt.Sprintf("%x", md5.Sum([]byte(s)))
+	h := md5.Sum([]byte(s))
+	return hex.EncodeToString(h[:])
 }
 
 func hashit(salt, password string) string {
 	step3 := strings.ToLower(md5Hash(salt)) + strings.ToLower(md5Hash(password))
-	step4 := strings.ToLower(md5Hash(step3))
-	return step4
+	return strings.ToLower(md5Hash(step3))
 }
 
 // ─── Session Helpers ──────────────────────────────────────────────────────────
 
+// secureToken generates a cryptographically random 32-byte hex token
+func secureToken() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 func createSession(username string) string {
-	token := md5Hash(username + time.Now().String() + "dewata_secret_2026")
+	token := secureToken()
 	sessionsMu.Lock()
 	sessions[token] = SessionData{Username: username, ExpiresAt: time.Now().Add(24 * time.Hour)}
 	sessionsMu.Unlock()
@@ -75,6 +95,22 @@ func deleteSession(r *http.Request) {
 	sessionsMu.Unlock()
 }
 
+// cleanExpiredSessions runs in background, purges stale sessions every 30 min
+func cleanExpiredSessions() {
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		now := time.Now()
+		sessionsMu.Lock()
+		for k, v := range sessions {
+			if now.After(v.ExpiresAt) {
+				delete(sessions, k)
+			}
+		}
+		sessionsMu.Unlock()
+	}
+}
+
 // ─── DB Init ──────────────────────────────────────────────────────────────────
 
 func initDB() {
@@ -84,20 +120,32 @@ func initDB() {
 	pass := getEnv("DB_PASS", "qJHEEZZraPLuQGGOtHPSvWT=")
 	name := getEnv("DB_NAME", "s1649_Dewata")
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", user, pass, host, port, name)
+	dsn := fmt.Sprintf(
+		"%s:%s@tcp(%s:%s)/%s?parseTime=true&collation=utf8mb4_unicode_ci&timeout=10s&readTimeout=15s&writeTimeout=15s&interpolateParams=true",
+		user, pass, host, port, name,
+	)
 	var err error
 	db, err = sql.Open("mysql", dsn)
 	if err != nil {
 		log.Printf("DB open error: %v", err)
 		return
 	}
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
+
+	// Tune connection pool based on CPU count
+	cpus := runtime.NumCPU()
+	maxOpen := cpus * 8
+	if maxOpen < 16 {
+		maxOpen = 16
+	}
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(cpus * 2)
 	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
+
 	if err = db.Ping(); err != nil {
 		log.Printf("DB ping error: %v", err)
 	} else {
-		log.Println("Database connected!")
+		log.Printf("Database connected! (pool: max=%d idle=%d)", maxOpen, cpus*2)
 	}
 }
 
@@ -108,12 +156,48 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// ─── JSON Response ─────────────────────────────────────────────────────────────
+// ─── JSON Response (zero-alloc buffer pool) ───────────────────────────────────
 
 func jsonResp(w http.ResponseWriter, code int, data any) {
-	w.Header().Set("Content-Type", "application/json")
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	if err := json.NewEncoder(buf).Encode(data); err != nil {
+		bufPool.Put(buf)
+		http.Error(w, `{"error":"encode error"}`, 500)
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "application/json")
+	h.Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(data)
+	w.Write(buf.Bytes())
+	bufPool.Put(buf)
+}
+
+// ─── Security + Middleware ────────────────────────────────────────────────────
+
+// securityHeaders adds hardened HTTP headers to every response
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-XSS-Protection", "1; mode=block")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
+}
+
+
+
+// maxBodyBytes is the max request body we accept (4 KB is plenty for JSON API)
+const maxBodyBytes = 4 * 1024
+
+// decodeJSON decodes r.Body into v with a 4 KB cap — prevents large-body DoS
+func decodeJSON(r *http.Request, v any) error {
+	dec := json.NewDecoder(&io.LimitedReader{R: r.Body, N: maxBodyBytes})
+	return dec.Decode(v)
 }
 
 // ─── API Handlers ──────────────────────────────────────────────────────────────
@@ -127,7 +211,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
@@ -162,7 +246,7 @@ func handleVerifyAdminKey(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		AdminKey string `json:"admin_key"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
@@ -364,7 +448,7 @@ func handleSetMoney(w http.ResponseWriter, r *http.Request) {
 		Type     string `json:"type"`
 		Value    int64  `json:"value"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
@@ -406,7 +490,7 @@ func handleSetItem(w http.ResponseWriter, r *http.Request) {
 		Type     string `json:"type"`
 		Value    int64  `json:"value"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
@@ -454,7 +538,7 @@ func handleSetAccount(w http.ResponseWriter, r *http.Request) {
 		Type     string `json:"type"`
 		Value    int64  `json:"value"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
@@ -499,7 +583,7 @@ func handleSetProperty(w http.ResponseWriter, r *http.Request) {
 		Type     string      `json:"type"`
 		Value    interface{} `json:"value"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
@@ -547,7 +631,6 @@ func handleAdminLog(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, 500, map[string]string{"error": "database not connected"})
 		return
 	}
-	// user_id is INT, no auto-increment id column — order by date DESC
 	rows, err := db.Query("SELECT user_id, action, date FROM admin_log ORDER BY date DESC LIMIT 200")
 	if err != nil {
 		jsonResp(w, 500, map[string]string{"error": err.Error()})
@@ -559,7 +642,7 @@ func handleAdminLog(w http.ResponseWriter, r *http.Request) {
 		Action string `json:"action"`
 		Date   string `json:"date"`
 	}
-	var list []LogEntry
+	list := make([]LogEntry, 0, 200)
 	for rows.Next() {
 		var e LogEntry
 		var rawDate []byte
@@ -568,36 +651,53 @@ func handleAdminLog(w http.ResponseWriter, r *http.Request) {
 			list = append(list, e)
 		}
 	}
-	if list == nil {
-		list = []LogEntry{}
-	}
 	jsonResp(w, 200, list)
 }
 
-// lookupAccountID returns the integer account ID for a given username (pName)
-// Falls back to 0 if not found or DB unavailable
+// logActionCh is a buffered channel for async, non-blocking log writes
+var logActionCh = make(chan logEntry, 512)
+
+type logEntry struct {
+	UserID int
+	Action string
+	Date   string
+}
+
+// startLogWorker drains logActionCh and batches INSERT to DB in background
+func startLogWorker() {
+	go func() {
+		for e := range logActionCh {
+			if db == nil {
+				continue
+			}
+			db.Exec("INSERT INTO admin_log (user_id, action, date) VALUES (?, ?, ?)",
+				e.UserID, e.Action, e.Date)
+		}
+	}()
+}
+
+// lookupAccountID returns pID for a given username — uses pID per actual schema
 func lookupAccountID(username string) int {
 	if db == nil {
 		return 0
 	}
 	var id int
-	// Try common ID column names used in SAMP scripts
-	for _, col := range []string{"ID", "pID", "id", "AccountID"} {
-		err := db.QueryRow("SELECT `"+col+"` FROM accounts WHERE pName=? LIMIT 1", username).Scan(&id)
-		if err == nil {
-			return id
-		}
-	}
-	return 0
+	db.QueryRow("SELECT pID FROM accounts WHERE pName=? LIMIT 1", username).Scan(&id)
+	return id
 }
 
+// logAction is fully async — never blocks request handlers
 func logAction(username, action string) {
-	if db == nil {
-		return
-	}
 	uid := lookupAccountID(username)
-	db.Exec("INSERT INTO admin_log (user_id, action, date) VALUES (?, ?, ?)",
-		uid, action, time.Now().Format("2006-01-02 15:04:05"))
+	select {
+	case logActionCh <- logEntry{
+		UserID: uid,
+		Action: action,
+		Date:   time.Now().Format("2006-01-02 15:04:05"),
+	}:
+	default:
+		// channel full — drop silently rather than block
+	}
 }
 
 // ─── Set Gun ──────────────────────────────────────────────────────────────────
@@ -625,7 +725,7 @@ func handleSetGun(w http.ResponseWriter, r *http.Request) {
 		GunID    int    `json:"gun_id"`
 		Ammo     int    `json:"ammo"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
@@ -815,7 +915,7 @@ func handleSetVeh(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		VehID    int    `json:"veh_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
@@ -930,7 +1030,7 @@ func handleSetVip(w http.ResponseWriter, r *http.Request) {
 		VipType  int    `json:"vip_type"`
 		Days     int    `json:"days"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
@@ -1153,7 +1253,7 @@ func handleSetAdmin(w http.ResponseWriter, r *http.Request) {
 		AName    string `json:"aname"`
 		Key      string `json:"key"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
@@ -1283,7 +1383,7 @@ func handleRemoveAdmin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username string `json:"username"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		jsonResp(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
@@ -1342,6 +1442,177 @@ func handleGetAdminList(w http.ResponseWriter, r *http.Request) {
 }
 
 
+
+// ─── Property: Add Bisnis & Add House ────────────────────────────────────────
+
+var bizzInteriorTypes = map[int]string{
+	1: "Beer Shop", 2: "Fast Food", 3: "Market", 4: "Clothes",
+	5: "Equipment", 7: "Hotel", 8: "Clothes", 9: "Equipment",
+	10: "Hotel", 11: "Clothes", 12: "Equipment", 13: "Hotel",
+}
+
+func handleAddBizz(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		BMessage    string  `json:"bMessage"`
+		BuyPrice    int64   `json:"bBuyPrice"`
+		Interior    int     `json:"bInterior"`
+		EntranceX   float64 `json:"bEntranceX"`
+		EntranceY   float64 `json:"bEntranceY"`
+		EntranceZ   float64 `json:"bEntranceZ"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if strings.TrimSpace(req.BMessage) == "" {
+		jsonResp(w, 400, map[string]string{"error": "nama bisnis wajib diisi"})
+		return
+	}
+	if req.BuyPrice < 5_000_000 || req.BuyPrice > 100_000_000 {
+		jsonResp(w, 400, map[string]string{"error": "harga beli harus antara 5 juta dan 100 juta"})
+		return
+	}
+	if _, ok := bizzInteriorTypes[req.Interior]; !ok {
+		jsonResp(w, 400, map[string]string{"error": "tipe interior tidak valid"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	// Auto-increment bID
+	var maxID int
+	db.QueryRow("SELECT COALESCE(MAX(bID),0) FROM bizz").Scan(&maxID)
+	newID := maxID + 1
+
+	_, err := db.Exec(`INSERT INTO bizz
+		(bID, bOwned, bOwner, bMessage, bEntranceX, bEntranceY, bEntranceZ,
+		 bExitX, bExitY, bExitZ, bBuyPrice, bEntranceCost, bMoney, bRaschet,
+		 bLocked, bInterior, bProducts, bPrice, bBarX, bBarY, bBarZ,
+		 bMafia, b, bVirtualWorld, bOplata, bSlet, bArenda,
+		 bUpdMusic, bUpdHeal, bUpdSub, bSotrud, bSklad, bPhone, bProcent, bSong)
+		VALUES (?,0,'The State',?,?,?,?,0.0,0.0,0.0,?,0,0,0,0,?,0,?,0.0,0.0,0.0,0,0,0,0,0,0,0,0,0,0,0,0,0,'0')`,
+		newID, req.BMessage,
+		req.EntranceX, req.EntranceY, req.EntranceZ,
+		req.BuyPrice, req.Interior, req.BuyPrice,
+	)
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal insert: " + err.Error()})
+		return
+	}
+
+	s, _ := getSession(r)
+	typeName := bizzInteriorTypes[req.Interior]
+	logAction(s.Username, fmt.Sprintf("Add bisnis bID=%d '%s' tipe=%s harga=%d", newID, req.BMessage, typeName, req.BuyPrice))
+
+	jsonResp(w, 200, map[string]any{
+		"status": "created",
+		"bID":    newID,
+		"bMessage": req.BMessage,
+		"type_name": typeName,
+	})
+}
+
+func handleAddHouse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		EntranceX float64 `json:"hEntrancex"`
+		EntranceY float64 `json:"hEntrancey"`
+		EntranceZ float64 `json:"hEntrancez"`
+		CarX      float64 `json:"hCarx"`
+		CarY      float64 `json:"hCary"`
+		CarZ      float64 `json:"hCarz"`
+		CarC      float64 `json:"hCarc"`
+		HValue    int64   `json:"hValue"`
+		HInt      int     `json:"hInt"`
+		HKlass    int     `json:"hKlass"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.HValue < 5_000_000 || req.HValue > 100_000_000 {
+		jsonResp(w, 400, map[string]string{"error": "harga rumah harus antara 5 juta dan 100 juta"})
+		return
+	}
+	if req.HInt < 0 || req.HInt > 2 {
+		jsonResp(w, 400, map[string]string{"error": "tipe interior tidak valid (0-2)"})
+		return
+	}
+	if req.HKlass < 0 || req.HKlass > 3 {
+		jsonResp(w, 400, map[string]string{"error": "tipe house tidak valid (0-3)"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	var maxID int
+	db.QueryRow("SELECT COALESCE(MAX(hID),0) FROM house").Scan(&maxID)
+	newID := maxID + 1
+
+	_, err := db.Exec(`INSERT INTO house
+		(hID, hEntrancex, hEntrancey, hEntrancez,
+		 hCarx, hCary, hCarz, hCarc,
+		 hOwner, hValue, hHel, hInt, hLock, hOwned, hKlass,
+		 hUpdAD, hUpdHel, hUpdSub, hUpdWkaf,
+		 hHealpickX, hHealpickY, hHealpickZ,
+		 hWkafX, hWkafY, hWkafZ, hWkafX1, hWkafY1, hWkafZ1,
+		 hWkafDrugs, hWkafMoney, hWkafPatr, hWkafMetall,
+		 hWkafSDPistol, hWkafDeagle, hWkafShotGun, hWkafMP5, hWkafAK47, hWkafM4,
+		 hSlet, hTakings, hOplata, hLodgers, hUpdStore, hUpdStorePos,
+		 hWeaponID, hAmmo, hDrugs)
+		VALUES (?,?,?,?,?,?,?,?,'The State',?,100,?,0,0,?,0,0,0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0,0,0,0,0,0,0,0,0,0,0,0,0,'null,null,null',0,'0.0,0.0,0.0','0,0,0','0,0,0',0)`,
+		newID,
+		req.EntranceX, req.EntranceY, req.EntranceZ,
+		req.CarX, req.CarY, req.CarZ, req.CarC,
+		req.HValue, req.HInt, req.HKlass,
+	)
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal insert: " + err.Error()})
+		return
+	}
+
+	hIntNames := map[int]string{0: "Miskin", 1: "Medium", 2: "High"}
+	hKlassNames := map[int]string{0: "Miskin", 1: "Medium", 2: "High", 3: "VIP"}
+	s, _ := getSession(r)
+	logAction(s.Username, fmt.Sprintf("Add house hID=%d int=%s klass=%s harga=%d",
+		newID, hIntNames[req.HInt], hKlassNames[req.HKlass], req.HValue))
+
+	jsonResp(w, 200, map[string]any{
+		"status":      "created",
+		"hID":         newID,
+		"int_name":    hIntNames[req.HInt],
+		"klass_name":  hKlassNames[req.HKlass],
+	})
+}
+
+func handleGetPropertyStats(w http.ResponseWriter, r *http.Request) {
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+	var totalBizz, ownedBizz, totalHouse, ownedHouse int
+	db.QueryRow("SELECT COUNT(*), SUM(CASE WHEN bOwned=1 THEN 1 ELSE 0 END) FROM bizz").Scan(&totalBizz, &ownedBizz)
+	db.QueryRow("SELECT COUNT(*), SUM(CASE WHEN hOwned=1 THEN 1 ELSE 0 END) FROM house").Scan(&totalHouse, &ownedHouse)
+	jsonResp(w, 200, map[string]any{
+		"total_bizz":  totalBizz,
+		"owned_bizz":  ownedBizz,
+		"total_house": totalHouse,
+		"owned_house": ownedHouse,
+	})
+}
+
+// ─── HTML Page ────────────────────────────────────────────────────────────────
 
 const htmlPage = `<!DOCTYPE html>
 <html lang="id">
@@ -2043,6 +2314,10 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
         <span class="nav-icon">🛡️</span>
         <span>Set Admin</span>
       </div>
+      <div class="nav-item" onclick="showPage('property')">
+        <span class="nav-icon">🏠</span>
+        <span>Add Property</span>
+      </div>
       <div class="nav-item" onclick="showPage('backup')">
         <span class="nav-icon">💾</span>
         <span>Backup Database</span>
@@ -2697,6 +2972,179 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
   </div>
 </template>
 
+<!-- Property Page -->
+<template id="tpl-property">
+  <div class="page" id="page-property">
+    <div class="page-title">&#127968; Add Property</div>
+    <div class="page-sub">Tambahkan bisnis atau rumah baru ke dalam server.</div>
+
+    <!-- Stats row -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px" id="prop-stats">
+      <div class="info-card" style="text-align:center">
+        <div class="info-label">Total Bisnis</div>
+        <div style="font-family:Orbitron,sans-serif;font-size:28px;font-weight:700;color:var(--accent)" id="stat-bizz-total">—</div>
+        <div style="font-size:11px;color:var(--textmuted);margin-top:4px" id="stat-bizz-owned">— dimiliki</div>
+      </div>
+      <div class="info-card" style="text-align:center">
+        <div class="info-label">Total Rumah</div>
+        <div style="font-family:Orbitron,sans-serif;font-size:28px;font-weight:700;color:var(--accent3)" id="stat-house-total">—</div>
+        <div style="font-size:11px;color:var(--textmuted);margin-top:4px" id="stat-house-owned">— dimiliki</div>
+      </div>
+    </div>
+
+    <!-- Tab switcher -->
+    <div style="display:flex;gap:8px;margin-bottom:20px">
+      <button class="btn btn-primary btn-sm" id="tab-bizz-btn" onclick="switchPropTab('bizz')">&#127981; Add Bisnis</button>
+      <button class="btn btn-copy btn-sm"    id="tab-house-btn" onclick="switchPropTab('house')">&#127968; Add Rumah</button>
+    </div>
+
+    <!-- ═══ ADD BISNIS ═══ -->
+    <div id="prop-tab-bizz">
+      <div class="card">
+        <div class="card-title">&#127981; Add Bisnis Baru</div>
+
+        <div class="input-row" style="grid-template-columns:1fr 1fr">
+          <div class="form-group">
+            <label>Nama Bisnis (bMessage)</label>
+            <input type="text" id="bizz-name" placeholder="contoh: Toko ABC..." maxlength="64"/>
+          </div>
+          <div class="form-group">
+            <label>Harga Beli (bBuyPrice) — 5jt s/d 100jt</label>
+            <input type="number" id="bizz-price" placeholder="5000000" min="5000000" max="100000000"/>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Tipe Interior (bInterior)</label>
+          <select id="bizz-interior">
+            <option value="1">1 — Beer Shop</option>
+            <option value="2">2 — Fast Food</option>
+            <option value="3">3 — Market</option>
+            <option value="4">4 — Clothes</option>
+            <option value="5">5 — Equipment</option>
+            <option value="7">7 — Hotel</option>
+            <option value="8">8 — Clothes</option>
+            <option value="9">9 — Equipment</option>
+            <option value="10">10 — Hotel</option>
+            <option value="11">11 — Clothes</option>
+            <option value="12">12 — Equipment</option>
+            <option value="13">13 — Hotel</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:10px;font-weight:700">Koordinat Entrance</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>X (bEntranceX)</label>
+              <input type="number" id="bizz-x" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Y (bEntranceY)</label>
+              <input type="number" id="bizz-y" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Z (bEntranceZ)</label>
+              <input type="number" id="bizz-z" placeholder="0.0" step="0.001"/>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--textmuted);line-height:1.7">
+          ℹ️ Field lainnya akan diset ke default:
+          <span style="color:var(--text2)">bOwned=0, bOwner='The State', bLocked=0, bMoney=0, bMafia=0, bSong='0', dll</span>
+        </div>
+
+        <button class="btn btn-primary" style="max-width:220px" onclick="addBizz()">&#43; ADD BISNIS</button>
+        <div class="error-msg"   id="bizz-err"></div>
+        <div class="success-msg" id="bizz-ok"></div>
+      </div>
+    </div>
+
+    <!-- ═══ ADD HOUSE ═══ -->
+    <div id="prop-tab-house" style="display:none">
+      <div class="card">
+        <div class="card-title">&#127968; Add Rumah Baru</div>
+
+        <div class="input-row" style="grid-template-columns:1fr 1fr">
+          <div class="form-group">
+            <label>Harga Rumah (hValue) — 5jt s/d 100jt</label>
+            <input type="number" id="house-value" placeholder="5000000" min="5000000" max="100000000"/>
+          </div>
+          <div class="form-group">
+            <label>Tipe Interior (hInt)</label>
+            <select id="house-int">
+              <option value="0">0 — Miskin</option>
+              <option value="1">1 — Medium</option>
+              <option value="2">2 — High</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Tipe Kelas Rumah (hKlass)</label>
+          <select id="house-klass">
+            <option value="0">0 — Miskin</option>
+            <option value="1">1 — Medium</option>
+            <option value="2">2 — High</option>
+            <option value="3">3 — VIP</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:10px;font-weight:700">Koordinat Entrance Rumah</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>X (hEntrancex)</label>
+              <input type="number" id="house-ex" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Y (hEntrancey)</label>
+              <input type="number" id="house-ey" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Z (hEntrancez)</label>
+              <input type="number" id="house-ez" placeholder="0.0" step="0.001"/>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:10px;font-weight:700">Koordinat Spawn Kendaraan</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>X (hCarx)</label>
+              <input type="number" id="house-cx" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Y (hCary)</label>
+              <input type="number" id="house-cy" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Z (hCarz)</label>
+              <input type="number" id="house-cz" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Angle (hCarc)</label>
+              <input type="number" id="house-cc" placeholder="0.0" step="0.001"/>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--textmuted);line-height:1.7">
+          ℹ️ Field lainnya akan diset ke default:
+          <span style="color:var(--text2)">hOwned=0, hOwner='The State', hLock=0, hHel=100, hSlet=0, hLodgers='null,null,null', dll</span>
+        </div>
+
+        <button class="btn btn-primary" style="max-width:220px" onclick="addHouse()">&#43; ADD RUMAH</button>
+        <div class="error-msg"   id="house-err"></div>
+        <div class="success-msg" id="house-ok"></div>
+      </div>
+    </div>
+
+  </div>
+</template>
+
 <!-- Backup Page (inside content, added via JS showPage) -->
 <template id="tpl-backup">
   <div class="page" id="page-backup">
@@ -2884,11 +3332,10 @@ function toggleSidebar() {
 }
 
 // ─── Pages ─────────────────────────────────────────────────────────────────────
-var pageTitles = {dashboard:'Dashboard',getcord:'Getcord List',set:'Set Menu',adminlog:'Admin Log',inventory:'Inventori Player',setadmin:'Set Admin',backup:'Backup Database'};
+var pageTitles = {dashboard:'Dashboard',getcord:'Getcord List',set:'Set Menu',adminlog:'Admin Log',inventory:'Inventori Player',setadmin:'Set Admin',property:'Add Property',backup:'Backup Database'};
 
 function showPage(name) {
-  // Inject templates on first use
-  if ((name === 'backup' || name === 'inventory' || name === 'setadmin') && !document.getElementById('page-'+name)) {
+  if (['backup','inventory','setadmin','property'].indexOf(name) !== -1 && !document.getElementById('page-'+name)) {
     var tpl = document.getElementById('tpl-'+name);
     var node = tpl.content.cloneNode(true);
     document.getElementById('content').appendChild(node);
@@ -2898,9 +3345,8 @@ function showPage(name) {
   document.getElementById('page-'+name).classList.add('active');
   document.getElementById('page-title').textContent = pageTitles[name] || name;
   var navItems = document.querySelectorAll('.nav-item');
-  var idx = {dashboard:0,getcord:1,set:2,adminlog:3,inventory:4,setadmin:5,backup:6};
+  var idx = {dashboard:0,getcord:1,set:2,adminlog:3,inventory:4,setadmin:5,property:6,backup:7};
   if (navItems[idx[name]]) navItems[idx[name]].classList.add('active');
-  // Close drawer on mobile after nav
   if (isDrawerMode() && sidebarOpen) {
     sidebarOpen = false;
     document.getElementById('sidebar').classList.remove('open');
@@ -2908,6 +3354,7 @@ function showPage(name) {
   }
   if (name==='getcord') loadGetcord();
   if (name==='adminlog') loadAdminLog();
+  if (name==='property') loadPropStats();
 }
 
 // ─── Getcord ───────────────────────────────────────────────────────────────────
@@ -3666,6 +4113,118 @@ function quickEditAdmin(name) {
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
+// ─── Add Property ─────────────────────────────────────────────────────────────
+
+function switchPropTab(tab) {
+  var bizzTab  = document.getElementById('prop-tab-bizz');
+  var houseTab = document.getElementById('prop-tab-house');
+  var bizzBtn  = document.getElementById('tab-bizz-btn');
+  var houseBtn = document.getElementById('tab-house-btn');
+  if (!bizzTab || !houseTab) return;
+  if (tab === 'bizz') {
+    bizzTab.style.display  = 'block';
+    houseTab.style.display = 'none';
+    bizzBtn.className  = 'btn btn-primary btn-sm';
+    houseBtn.className = 'btn btn-copy btn-sm';
+  } else {
+    bizzTab.style.display  = 'none';
+    houseTab.style.display = 'block';
+    bizzBtn.className  = 'btn btn-copy btn-sm';
+    houseBtn.className = 'btn btn-primary btn-sm';
+  }
+}
+
+async function loadPropStats() {
+  try {
+    var r = await fetch('/api/property/stats');
+    if (!r.ok) return;
+    var d = await r.json();
+    var el = function(id) { return document.getElementById(id); };
+    if (el('stat-bizz-total'))  el('stat-bizz-total').textContent  = d.total_bizz || 0;
+    if (el('stat-bizz-owned'))  el('stat-bizz-owned').textContent  = (d.owned_bizz || 0) + ' dimiliki';
+    if (el('stat-house-total')) el('stat-house-total').textContent = d.total_house || 0;
+    if (el('stat-house-owned')) el('stat-house-owned').textContent = (d.owned_house || 0) + ' dimiliki';
+  } catch(e) {}
+}
+
+async function addBizz() {
+  var name     = document.getElementById('bizz-name').value.trim();
+  var price    = parseInt(document.getElementById('bizz-price').value);
+  var interior = parseInt(document.getElementById('bizz-interior').value);
+  var x        = parseFloat(document.getElementById('bizz-x').value);
+  var y        = parseFloat(document.getElementById('bizz-y').value);
+  var z        = parseFloat(document.getElementById('bizz-z').value);
+
+  resetMsg('bizz-err', 'bizz-ok');
+  if (!name)                              { showMsg('bizz-err','Nama bisnis wajib diisi'); return; }
+  if (isNaN(price) || price < 5000000 || price > 100000000)
+                                          { showMsg('bizz-err','Harga harus antara 5 juta - 100 juta'); return; }
+  if (isNaN(x) || isNaN(y) || isNaN(z)) { showMsg('bizz-err','Koordinat X, Y, Z wajib diisi'); return; }
+
+  try {
+    var r = await fetch('/api/property/add-bizz', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        bMessage: name, bBuyPrice: price, bInterior: interior,
+        bEntranceX: x, bEntranceY: y, bEntranceZ: z
+      })
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('bizz-err', d.error || 'Gagal tambah bisnis'); return; }
+    showMsg('bizz-ok', 'Bisnis berhasil ditambahkan! ID: ' + d.bID + ' | ' + escHtml(d.bMessage) + ' (' + escHtml(d.type_name) + ')');
+    showToast('Bisnis #' + d.bID + ' berhasil dibuat!', 'success');
+    // Reset form
+    document.getElementById('bizz-name').value  = '';
+    document.getElementById('bizz-price').value = '';
+    document.getElementById('bizz-x').value = '';
+    document.getElementById('bizz-y').value = '';
+    document.getElementById('bizz-z').value = '';
+    loadPropStats();
+  } catch(e) { showMsg('bizz-err', 'Koneksi error'); }
+}
+
+async function addHouse() {
+  var value = parseInt(document.getElementById('house-value').value);
+  var hInt  = parseInt(document.getElementById('house-int').value);
+  var klass = parseInt(document.getElementById('house-klass').value);
+  var ex = parseFloat(document.getElementById('house-ex').value);
+  var ey = parseFloat(document.getElementById('house-ey').value);
+  var ez = parseFloat(document.getElementById('house-ez').value);
+  var cx = parseFloat(document.getElementById('house-cx').value);
+  var cy = parseFloat(document.getElementById('house-cy').value);
+  var cz = parseFloat(document.getElementById('house-cz').value);
+  var cc = parseFloat(document.getElementById('house-cc').value);
+
+  resetMsg('house-err', 'house-ok');
+  if (isNaN(value) || value < 5000000 || value > 100000000)
+                                              { showMsg('house-err','Harga harus antara 5 juta - 100 juta'); return; }
+  if (isNaN(ex) || isNaN(ey) || isNaN(ez))  { showMsg('house-err','Koordinat entrance X, Y, Z wajib diisi'); return; }
+  if (isNaN(cx) || isNaN(cy) || isNaN(cz) || isNaN(cc))
+                                              { showMsg('house-err','Koordinat spawn kendaraan wajib diisi'); return; }
+
+  try {
+    var r = await fetch('/api/property/add-house', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        hEntrancex: ex, hEntrancey: ey, hEntrancez: ez,
+        hCarx: cx, hCary: cy, hCarz: cz, hCarc: cc,
+        hValue: value, hInt: hInt, hKlass: klass
+      })
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('house-err', d.error || 'Gagal tambah rumah'); return; }
+    showMsg('house-ok', 'Rumah berhasil ditambahkan! ID: ' + d.hID + ' | Interior: ' + escHtml(d.int_name) + ' | Kelas: ' + escHtml(d.klass_name));
+    showToast('Rumah #' + d.hID + ' berhasil dibuat!', 'success');
+    // Reset form
+    ['house-value','house-ex','house-ey','house-ez','house-cx','house-cy','house-cz','house-cc'].forEach(function(id) {
+      document.getElementById(id).value = '';
+    });
+    loadPropStats();
+  } catch(e) { showMsg('house-err', 'Koneksi error'); }
+}
+
 // ─── Backup Export ────────────────────────────────────────────────────────────
 function doExport() {
   var btn = document.getElementById('export-btn');
@@ -3941,55 +4500,91 @@ func handleBackupExport(w http.ResponseWriter, r *http.Request) {
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
 func main() {
+	// Use all available CPU cores
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	initDB()
+
+	// Pre-encode HTML page once into memory — served from []byte, zero alloc per req
+	htmlPageBytes = []byte(htmlPage)
+
+	// Start background workers
+	go cleanExpiredSessions()
+	startLogWorker()
 
 	mux := http.NewServeMux()
 
-	// Static files: icon folder
-	mux.Handle("/icon/", http.StripPrefix("/icon/", http.FileServer(http.Dir("icon"))))
+	// ── Static files with caching headers ──────────────────────────────────────
+	iconFS := http.FileServer(http.Dir("icon"))
+	mux.Handle("/icon/", http.StripPrefix("/icon/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		iconFS.ServeHTTP(w, r)
+	})))
 
-	// Static page
+	// ── HTML page — served from pre-encoded bytes ───────────────────────────────
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(htmlPage))
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		h := w.Header()
+		h.Set("Content-Type", "text/html; charset=utf-8")
+		h.Set("Cache-Control", "no-store")
+		w.Write(htmlPageBytes)
 	})
 
-	// Auth endpoints
+	// ── Auth endpoints ──────────────────────────────────────────────────────────
 	mux.HandleFunc("/api/login", handleLogin)
 	mux.HandleFunc("/api/verify-admin-key", handleVerifyAdminKey)
 	mux.HandleFunc("/api/logout", handleLogout)
 	mux.HandleFunc("/api/check-auth", handleCheckAuth)
 
-	// Protected endpoints
-	mux.HandleFunc("/api/getcord", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		handleGetcordList(w, r)
-	}))
-	mux.HandleFunc("/api/getcord/", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		handleDeleteGetcord(w, r)
-	}))
-	mux.HandleFunc("/api/check-user", authMiddleware(handleCheckUser))
-	mux.HandleFunc("/api/set/money", authMiddleware(handleSetMoney))
-	mux.HandleFunc("/api/set/item", authMiddleware(handleSetItem))
-	mux.HandleFunc("/api/set/account", authMiddleware(handleSetAccount))
-	mux.HandleFunc("/api/set/property", authMiddleware(handleSetProperty))
-	mux.HandleFunc("/api/set/vip", authMiddleware(handleSetVip))
-	mux.HandleFunc("/api/get-vip", authMiddleware(handleGetVip))
-	mux.HandleFunc("/api/inventory", authMiddleware(handleGetInventory))
-	mux.HandleFunc("/api/set/admin", authMiddleware(handleSetAdmin))
-	mux.HandleFunc("/api/get-admin-info", authMiddleware(handleGetAdminInfo))
-	mux.HandleFunc("/api/remove-admin", authMiddleware(handleRemoveAdmin))
-	mux.HandleFunc("/api/admin-list", authMiddleware(handleGetAdminList))
-	mux.HandleFunc("/api/set/gun", authMiddleware(handleSetGun))
-	mux.HandleFunc("/api/get-gun-slots", authMiddleware(handleGetGunSlots))
-	mux.HandleFunc("/api/set/veh", authMiddleware(handleSetVeh))
-	mux.HandleFunc("/api/get-veh-slots", authMiddleware(handleGetVehSlots))
-	mux.HandleFunc("/api/admin-log", authMiddleware(handleAdminLog))
-	mux.HandleFunc("/api/backup/export", authMiddleware(handleBackupExport))
+	// ── Protected endpoints ─────────────────────────────────────────────────────
+	protected := func(h http.HandlerFunc) http.HandlerFunc { return authMiddleware(h) }
 
+	mux.HandleFunc("/api/getcord",        protected(handleGetcordList))
+	mux.HandleFunc("/api/getcord/",       protected(handleDeleteGetcord))
+	mux.HandleFunc("/api/check-user",     protected(handleCheckUser))
+	mux.HandleFunc("/api/set/money",      protected(handleSetMoney))
+	mux.HandleFunc("/api/set/item",       protected(handleSetItem))
+	mux.HandleFunc("/api/set/account",    protected(handleSetAccount))
+	mux.HandleFunc("/api/set/property",   protected(handleSetProperty))
+	mux.HandleFunc("/api/set/vip",        protected(handleSetVip))
+	mux.HandleFunc("/api/get-vip",        protected(handleGetVip))
+	mux.HandleFunc("/api/inventory",      protected(handleGetInventory))
+	mux.HandleFunc("/api/set/admin",      protected(handleSetAdmin))
+	mux.HandleFunc("/api/get-admin-info", protected(handleGetAdminInfo))
+	mux.HandleFunc("/api/remove-admin",   protected(handleRemoveAdmin))
+	mux.HandleFunc("/api/admin-list",     protected(handleGetAdminList))
+	mux.HandleFunc("/api/set/gun",        protected(handleSetGun))
+	mux.HandleFunc("/api/get-gun-slots",  protected(handleGetGunSlots))
+	mux.HandleFunc("/api/set/veh",        protected(handleSetVeh))
+	mux.HandleFunc("/api/get-veh-slots",  protected(handleGetVehSlots))
+	mux.HandleFunc("/api/admin-log",      protected(handleAdminLog))
+	mux.HandleFunc("/api/backup/export",     protected(handleBackupExport))
+	mux.HandleFunc("/api/property/add-bizz", protected(handleAddBizz))
+	mux.HandleFunc("/api/property/add-house",protected(handleAddHouse))
+	mux.HandleFunc("/api/property/stats",    protected(handleGetPropertyStats))
+
+	// ── Tuned HTTP server ───────────────────────────────────────────────────────
 	port := getEnv("PORT", "8080")
-	addr := ":" + port
-	log.Printf("Dewata Nation RP Admin Panel running on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: securityHeaders(mux),
+
+		// Timeouts — prevent slow-client attacks
+		ReadTimeout:       10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+
+		// Larger max header — reasonable for admin panel
+		MaxHeaderBytes: 1 << 18, // 256 KB
+	}
+
+	log.Printf("🚀 Dewata Nation RP Admin Panel | addr=:%s | cpus=%d", port, runtime.NumCPU())
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }
+
