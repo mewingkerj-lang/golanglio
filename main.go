@@ -1623,11 +1623,10 @@ func handleOffBan(w http.ResponseWriter, r *http.Request) {
 	}
 	reason := strings.TrimSpace(req.Reason)
 	if reason == "" {
-		reason = "Melanggar peraturan server"
+		reason = "Melanggar peraturan"
 	}
-	if len(reason) > 128 {
-		jsonResp(w, 400, map[string]string{"error": "alasan maksimal 128 karakter"})
-		return
+	if len(reason) > 32 {
+		reason = reason[:32] // kolom reason varchar(32)
 	}
 	if db == nil {
 		jsonResp(w, 500, map[string]string{"error": "database not connected"})
@@ -1652,29 +1651,30 @@ func handleOffBan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Cek apakah sudah di-ban aktif di banlog
+	// Cek apakah sudah di-ban aktif — lockstate=1 (INT)
 	var existID int
 	alreadyBanned := db.QueryRow(
-		"SELECT id FROM banlog WHERE nameplayer=? AND lockstate='1' LIMIT 1", req.Username,
+		"SELECT id FROM banlog WHERE nameplayer=? AND lockstate=1 LIMIT 1", req.Username,
 	).Scan(&existID) == nil
 	if alreadyBanned {
 		jsonResp(w, 400, map[string]string{"error": "pemain sudah dalam status banned"})
 		return
 	}
 
-	// Hitung expire: Unix timestamp = sekarang + (86400 * hari)
-	expireUnix := time.Now().Unix() + int64(86400*req.Days)
-	expireTime := time.Unix(expireUnix, 0).Format("2006-01-02 15:04:05")
-	banDate := time.Now().Format("2006-01-02 15:04:05")
+	now := time.Now().Unix()
+	unbanDate := now + int64(86400*req.Days) // gettime() + (86400 * days)
 
 	s, _ := getSession(r)
 	adminWho := s.Username
+	if len(adminWho) > 32 {
+		adminWho = adminWho[:32] // nameadmin varchar(32)
+	}
 
-	// INSERT ke banlog — kolom sesuai struktur standar BlockAccounts SAMP
+	// INSERT sesuai schema: nameplayer, nameadmin, reason, date, unbandate, lockstate
 	_, err = db.Exec(
-		`INSERT INTO banlog (nameplayer, reason, bannedby, lockstate, bandate, expiredate, expireunix)
-		 VALUES (?, ?, ?, '1', ?, ?, ?)`,
-		req.Username, reason, adminWho, banDate, expireTime, expireUnix,
+		`INSERT INTO banlog (nameplayer, nameadmin, reason, date, unbandate, lockstate)
+		 VALUES (?, ?, ?, ?, ?, 1)`,
+		req.Username, adminWho, reason, now, unbanDate,
 	)
 	if err != nil {
 		jsonResp(w, 500, map[string]string{"error": "gagal insert banlog: " + err.Error()})
@@ -1682,18 +1682,19 @@ func handleOffBan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Increment pAdmBan di tabel admin
-	db.Exec("UPDATE admin SET pAdmBan=pAdmBan+1 WHERE Name=?", adminWho)
+	db.Exec("UPDATE admin SET pAdmBan=pAdmBan+1 WHERE Name=?", s.Username)
 
-	logAction(adminWho, fmt.Sprintf("OffBan %s selama %d hari | alasan: %s", req.Username, req.Days, reason))
+	logAction(s.Username, fmt.Sprintf("OffBan %s selama %d hari | alasan: %s", req.Username, req.Days, reason))
 
+	expireStr := time.Unix(unbanDate, 0).Format("2006-01-02 15:04:05")
 	jsonResp(w, 200, map[string]any{
 		"status":      "banned",
 		"username":    req.Username,
 		"days":        req.Days,
 		"reason":      reason,
-		"banned_by":   adminWho,
-		"expire_date": expireTime,
-		"expire_unix": expireUnix,
+		"banned_by":   s.Username,
+		"expire_date": expireStr,
+		"expire_unix": unbanDate,
 	})
 }
 
@@ -1718,10 +1719,10 @@ func handleUnban(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Cek apakah ada ban aktif
+	// Cek ada ban aktif (lockstate=1 INT)
 	var banID int
 	err := db.QueryRow(
-		"SELECT id FROM banlog WHERE nameplayer=? AND lockstate='1' LIMIT 1", req.Username,
+		"SELECT id FROM banlog WHERE nameplayer=? AND lockstate=1 LIMIT 1", req.Username,
 	).Scan(&banID)
 	if err == sql.ErrNoRows {
 		jsonResp(w, 404, map[string]string{"error": "pemain tidak dalam status banned"})
@@ -1731,8 +1732,8 @@ func handleUnban(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set lockstate = 0 (unban)
-	_, err = db.Exec("UPDATE banlog SET lockstate='0' WHERE nameplayer=? AND lockstate='1'", req.Username)
+	// Set lockstate=0 (unban)
+	_, err = db.Exec("UPDATE banlog SET lockstate=0 WHERE nameplayer=? AND lockstate=1", req.Username)
 	if err != nil {
 		jsonResp(w, 500, map[string]string{"error": "gagal unban: " + err.Error()})
 		return
@@ -1762,22 +1763,23 @@ func handleGetBanStatus(w http.ResponseWriter, r *http.Request) {
 		IsBanned   bool   `json:"is_banned"`
 		Reason     string `json:"reason"`
 		BannedBy   string `json:"banned_by"`
+		DateUnix   int64  `json:"date_unix"`
+		UnbanUnix  int64  `json:"unban_unix"`
 		BanDate    string `json:"ban_date"`
 		ExpireDate string `json:"expire_date"`
-		ExpireUnix int64  `json:"expire_unix"`
 		DaysLeft   int    `json:"days_left"`
 	}
 
 	var info BanInfo
-	var rawBanDate, rawExpire []byte
+	// Query kolom sesuai schema: nameadmin, reason, date, unbandate
 	err := db.QueryRow(
-		`SELECT reason, bannedby, bandate, expiredate, expireunix
-		 FROM banlog WHERE nameplayer=? AND lockstate='1'
+		`SELECT nameadmin, reason, date, unbandate
+		 FROM banlog WHERE nameplayer=? AND lockstate=1
 		 ORDER BY id DESC LIMIT 1`, username,
-	).Scan(&info.Reason, &info.BannedBy, &rawBanDate, &rawExpire, &info.ExpireUnix)
+	).Scan(&info.BannedBy, &info.Reason, &info.DateUnix, &info.UnbanUnix)
 
 	if err == sql.ErrNoRows {
-		// Not banned — also check if player exists
+		// Tidak banned — cek apakah player ada
 		var pID int
 		if db.QueryRow("SELECT pID FROM accounts WHERE pName=? LIMIT 1", username).Scan(&pID) == sql.ErrNoRows {
 			jsonResp(w, 404, map[string]string{"error": "pemain tidak ditemukan"})
@@ -1791,10 +1793,9 @@ func handleGetBanStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	info.IsBanned = true
-	info.BanDate = string(rawBanDate)
-	info.ExpireDate = string(rawExpire)
-	// Calculate days left from expireUnix
-	secsLeft := info.ExpireUnix - time.Now().Unix()
+	info.BanDate    = time.Unix(info.DateUnix, 0).Format("2006-01-02 15:04:05")
+	info.ExpireDate = time.Unix(info.UnbanUnix, 0).Format("2006-01-02 15:04:05")
+	secsLeft := info.UnbanUnix - time.Now().Unix()
 	if secsLeft > 0 {
 		info.DaysLeft = int(secsLeft/86400) + 1
 	}
@@ -3653,7 +3654,7 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
     <div class="card">
       <div class="card-title">&#9989; Unban Pemain</div>
       <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2)">
-        &#9432;&nbsp; Set <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">lockstate='0'</code> pada record ban aktif pemain di tabel <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">banlog</code>.
+        &#9432;&nbsp; Set <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">lockstate=0</code> pada record ban aktif pemain di tabel <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">banlog</code>.
       </div>
       <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
         <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
