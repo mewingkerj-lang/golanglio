@@ -2072,9 +2072,13 @@ body::after{
   background:var(--bg);
   z-index:9999;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:24px;
-  transition:opacity 0.6s;
+  transition:opacity 0.5s ease;
 }
-#loading-screen.hidden{opacity:0;pointer-events:none}
+#loading-screen.hidden{
+  opacity:0;
+  pointer-events:none;
+  visibility:hidden;
+}
 .loading-logo{
   width:clamp(80px,20vw,110px);height:clamp(80px,20vw,110px);
   border-radius:20px;object-fit:cover;
@@ -3747,23 +3751,35 @@ window.addEventListener('resize', function() {
 
 // ─── Loading ───────────────────────────────────────────────────────────────────
 function startLoading() {
-  var bar = document.getElementById('loading-bar');
+  var bar  = document.getElementById('loading-bar');
   var text = document.getElementById('loading-text');
-  var msgs = ['Initializing...','Connecting to database...','Loading modules...','Verifying session...','Ready!'];
-  var pct = 0, i = 0;
-  var iv = setInterval(function() {
-    pct += Math.random() * 22 + 8;
-    if (pct > 100) pct = 100;
-    bar.style.width = pct + '%';
-    if (i < msgs.length) text.textContent = msgs[i++];
-    if (pct >= 100) {
-      clearInterval(iv);
+  var steps = [
+    [15,  'Initializing...'],
+    [35,  'Connecting to database...'],
+    [55,  'Loading modules...'],
+    [75,  'Verifying session...'],
+    [90,  'Almost ready...'],
+    [100, 'Ready!']
+  ];
+  var i = 0;
+  function nextStep() {
+    if (i >= steps.length) return;
+    var s = steps[i++];
+    bar.style.width = s[0] + '%';
+    if (text) text.textContent = s[1];
+    if (s[0] < 100) {
+      setTimeout(nextStep, 260);
+    } else {
       setTimeout(function() {
-        document.getElementById('loading-screen').classList.add('hidden');
+        var ls = document.getElementById('loading-screen');
+        ls.classList.add('hidden');
+        // Setelah transisi selesai, force display:none agar benar-benar tidak blocking
+        setTimeout(function() { ls.style.display = 'none'; }, 550);
         checkAuth();
-      }, 400);
+      }, 350);
     }
-  }, 280);
+  }
+  nextStep();
 }
 
 // ─── Auth ──────────────────────────────────────────────────────────────────────
