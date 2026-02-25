@@ -4530,6 +4530,7 @@ function switchPunTab(tab) {
 }
 
 
+function clearPunInfo() {
   document.getElementById('pun-status-panel').style.display = 'none';
 }
 
@@ -5390,4 +5391,3 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
-}
