@@ -3512,159 +3512,164 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
 <template id="tpl-punishment">
   <div class="page" id="page-punishment">
     <div class="page-title">&#9939; Punishment</div>
-    <div class="page-sub">Kelola hukuman penjara (off-jail) untuk pemain offline.</div>
+    <div class="page-sub">Kelola hukuman pemain — pilih metode di bawah.</div>
 
-    <!-- Player status panel -->
-    <div class="card" style="margin-bottom:16px">
-      <div class="card-title">&#128269; Cek Status Pemain</div>
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
-          <label>Username Player</label>
-          <input type="text" id="pun-user" placeholder="Masukkan username..." oninput="clearPunInfo()" onkeydown="if(event.key==='Enter')checkPunStatus()"/>
-        </div>
-        <button class="btn btn-copy btn-sm" style="height:44px;padding:0 20px" onclick="checkPunStatus()">&#128269; CEK STATUS</button>
-      </div>
-
-      <!-- Status info panel -->
-      <div id="pun-status-panel" style="display:none;margin-top:16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px">
-        <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:12px;font-weight:700">Status Saat Ini</div>
-        <div style="display:flex;flex-wrap:wrap;gap:10px" id="pun-status-content"></div>
-      </div>
+    <!-- Tab switcher -->
+    <div style="display:flex;gap:8px;margin-bottom:22px">
+      <button id="pun-tab-jail-btn" class="btn btn-primary btn-sm" onclick="switchPunTab('jail')" style="min-width:140px">
+        &#9939; Jail / Penjara
+      </button>
+      <button id="pun-tab-ban-btn" class="btn btn-copy btn-sm" onclick="switchPunTab('ban')" style="min-width:140px">
+        &#128683; Ban Akun
+      </button>
     </div>
 
-    <!-- Off Jail card -->
-    <div class="card" style="margin-bottom:16px">
-      <div class="card-title">&#9939; Set Penjara (Off Jail)</div>
-      <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8">
-        &#9432;&nbsp; Sesuai command <code style="color:var(--accent3);background:var(--surface3);padding:2px 6px;border-radius:4px">/offjail</code> — hanya untuk <strong>pemain offline</strong>.
-        Durasi: <strong style="color:var(--accent3)">10–300 menit</strong>. Pemain yang sudah di penjara tidak bisa di-jail lagi.
-        <br/>Admin yang diset tidak bisa dipenjara.
-      </div>
+    <!-- ═══ TAB JAIL ═══ -->
+    <div id="pun-tab-jail">
 
-      <!-- Duration presets -->
-      <div style="margin-bottom:14px">
-        <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:700">Preset Durasi</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">
-          <button class="btn btn-copy btn-sm" onclick="setPunMins(10)">10 Menit</button>
-          <button class="btn btn-copy btn-sm" onclick="setPunMins(30)">30 Menit</button>
-          <button class="btn btn-copy btn-sm" onclick="setPunMins(60)">1 Jam</button>
-          <button class="btn btn-copy btn-sm" onclick="setPunMins(120)">2 Jam</button>
-          <button class="btn btn-copy btn-sm" onclick="setPunMins(180)">3 Jam</button>
-          <button class="btn btn-copy btn-sm" onclick="setPunMins(300)">5 Jam (MAX)</button>
+      <!-- Cek status jail -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">&#128269; Cek Status Penjara</div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+            <label>Username Player</label>
+            <input type="text" id="pun-user" placeholder="Masukkan username..." oninput="clearPunInfo()" onkeydown="if(event.key==='Enter')checkPunStatus()"/>
+          </div>
+          <button class="btn btn-copy btn-sm" style="height:44px;padding:0 20px" onclick="checkPunStatus()">&#128269; CEK STATUS</button>
+        </div>
+        <div id="pun-status-panel" style="display:none;margin-top:16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px">
+          <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:12px;font-weight:700">Status Penjara Saat Ini</div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px" id="pun-status-content"></div>
         </div>
       </div>
 
-      <div class="input-row" style="grid-template-columns:1fr 1fr auto">
-        <div class="form-group" style="margin-bottom:0">
-          <label>Username Player</label>
-          <input type="text" id="jail-user" placeholder="Username pemain..."/>
+      <!-- Off Jail -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">&#9939; Set Penjara (Off Jail)</div>
+        <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8">
+          &#9432;&nbsp; Sesuai command <code style="color:var(--accent3);background:var(--surface3);padding:2px 6px;border-radius:4px">/offjail</code> — hanya untuk <strong>pemain offline</strong>.
+          Durasi: <strong style="color:var(--accent3)">10–300 menit</strong>. Pemain yang sudah di penjara atau admin tidak bisa di-jail.
         </div>
-        <div class="form-group" style="margin-bottom:0">
-          <label>Durasi (menit) — min 10, max 300</label>
-          <input type="number" id="jail-mins" placeholder="60" min="10" max="300"/>
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:700">Preset Durasi</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <button class="btn btn-copy btn-sm" onclick="setPunMins(10)">10 Menit</button>
+            <button class="btn btn-copy btn-sm" onclick="setPunMins(30)">30 Menit</button>
+            <button class="btn btn-copy btn-sm" onclick="setPunMins(60)">1 Jam</button>
+            <button class="btn btn-copy btn-sm" onclick="setPunMins(120)">2 Jam</button>
+            <button class="btn btn-copy btn-sm" onclick="setPunMins(180)">3 Jam</button>
+            <button class="btn btn-copy btn-sm" onclick="setPunMins(300)">5 Jam (MAX)</button>
+          </div>
         </div>
-        <button class="btn btn-primary btn-sm" style="height:44px;padding:0 20px;background:linear-gradient(135deg,#7c3aed,#a855f7)" onclick="doOffJail()">&#9939; JAIL</button>
+        <div class="input-row" style="grid-template-columns:1fr 1fr auto">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Username Player</label>
+            <input type="text" id="jail-user" placeholder="Username pemain..."/>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Durasi (menit) — min 10, max 300</label>
+            <input type="number" id="jail-mins" placeholder="60" min="10" max="300"/>
+          </div>
+          <button class="btn btn-primary btn-sm" style="height:44px;padding:0 20px;background:linear-gradient(135deg,#7c3aed,#a855f7)" onclick="doOffJail()">&#9939; JAIL</button>
+        </div>
+        <div class="error-msg"   id="jail-err"></div>
+        <div class="success-msg" id="jail-ok"></div>
       </div>
-      <div class="error-msg"   id="jail-err"></div>
-      <div class="success-msg" id="jail-ok"></div>
+
+      <!-- Free Jail -->
+      <div class="card">
+        <div class="card-title">&#128275; Bebaskan dari Penjara</div>
+        <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2)">
+          &#9432;&nbsp; Set <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">pPrison=0</code> dan <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">pMestoPrison=0</code> untuk membebaskan pemain dari penjara.
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+            <label>Username Player</label>
+            <input type="text" id="free-user" placeholder="Username pemain..."/>
+          </div>
+          <button class="btn btn-sm" style="height:44px;padding:0 20px;background:linear-gradient(135deg,#059669,var(--green));color:#fff;border:none" onclick="doFreeJail()">&#128275; BEBASKAN</button>
+        </div>
+        <div class="error-msg"   id="free-err"></div>
+        <div class="success-msg" id="free-ok"></div>
+      </div>
+
     </div>
 
-    <!-- Free Jail card -->
-    <div class="card">
-      <div class="card-title">&#128275; Bebaskan dari Penjara</div>
-      <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2)">
-        &#9432;&nbsp; Bebaskan pemain yang sedang di penjara. Set <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">pPrison=0</code> dan <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">pMestoPrison=0</code>.
-      </div>
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
-          <label>Username Player</label>
-          <input type="text" id="free-user" placeholder="Username pemain..."/>
+    <!-- ═══ TAB BAN ═══ -->
+    <div id="pun-tab-ban" style="display:none">
+
+      <!-- Cek status ban -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">&#128269; Cek Status Ban</div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+            <label>Username Player</label>
+            <input type="text" id="ban-search" placeholder="Masukkan username..." oninput="clearBanInfo()" onkeydown="if(event.key==='Enter')checkBanStatus()"/>
+          </div>
+          <button class="btn btn-copy btn-sm" style="height:44px;padding:0 20px" onclick="checkBanStatus()">&#128269; CEK BAN</button>
         </div>
-        <button class="btn btn-sm" style="height:44px;padding:0 20px;background:linear-gradient(135deg,#059669,var(--green));color:#fff;border:none" onclick="doFreeJail()">&#128275; BEBASKAN</button>
-      </div>
-      <div class="error-msg"   id="free-err"></div>
-      <div class="success-msg" id="free-ok"></div>
-    </div>
-
-    <!-- divider -->
-    <div class="glow-line" style="margin:4px 0 20px"></div>
-    <div style="font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700;color:var(--accent3);letter-spacing:2px;margin-bottom:16px;text-transform:uppercase">&#128683; Sistem Ban</div>
-
-    <!-- Cek Status Ban -->
-    <div class="card" style="margin-bottom:16px">
-      <div class="card-title">&#128269; Cek Status Ban</div>
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
-          <label>Username Player</label>
-          <input type="text" id="ban-search" placeholder="Masukkan username..." oninput="clearBanInfo()" onkeydown="if(event.key==='Enter')checkBanStatus()"/>
-        </div>
-        <button class="btn btn-copy btn-sm" style="height:44px;padding:0 20px" onclick="checkBanStatus()">&#128269; CEK BAN</button>
-      </div>
-      <!-- Ban status panel -->
-      <div id="ban-status-panel" style="display:none;margin-top:16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px">
-        <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:12px;font-weight:700">Status Ban Saat Ini</div>
-        <div id="ban-status-content" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px"></div>
-        <div id="ban-detail-wrap" style="display:none;background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13px;line-height:1.9">
-          <div id="ban-detail-content"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Off Ban card -->
-    <div class="card" style="margin-bottom:16px">
-      <div class="card-title">&#128683; Set Ban (Off Ban)</div>
-      <div style="background:rgba(244,63,94,0.06);border:1px solid rgba(244,63,94,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8">
-        &#9432;&nbsp; Sesuai command <code style="color:#f43f5e;background:var(--surface3);padding:2px 6px;border-radius:4px">/offban</code> — hanya untuk <strong>pemain offline</strong>.
-        Durasi: <strong style="color:#f43f5e">1–30 hari</strong>. Admin tidak bisa di-ban. Pemain yang sudah di-ban tidak bisa di-ban lagi.
-      </div>
-
-      <!-- Preset durasi -->
-      <div style="margin-bottom:14px">
-        <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:700">Preset Durasi Ban</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">
-          <button class="btn btn-copy btn-sm" onclick="setBanDays(1)">1 Hari</button>
-          <button class="btn btn-copy btn-sm" onclick="setBanDays(3)">3 Hari</button>
-          <button class="btn btn-copy btn-sm" onclick="setBanDays(7)">7 Hari</button>
-          <button class="btn btn-copy btn-sm" onclick="setBanDays(14)">14 Hari</button>
-          <button class="btn btn-copy btn-sm" onclick="setBanDays(30)" style="border-color:rgba(244,63,94,0.4);color:#f43f5e">30 Hari (MAX)</button>
+        <div id="ban-status-panel" style="display:none;margin-top:16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px">
+          <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:12px;font-weight:700">Status Ban Saat Ini</div>
+          <div id="ban-status-content" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px"></div>
+          <div id="ban-detail-wrap" style="display:none;background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13px;line-height:1.9">
+            <div id="ban-detail-content"></div>
+          </div>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-        <div class="form-group" style="margin-bottom:0">
-          <label>Username Player</label>
-          <input type="text" id="ban-user" placeholder="Username pemain..."/>
+      <!-- Off Ban -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">&#128683; Set Ban (Off Ban)</div>
+        <div style="background:rgba(244,63,94,0.06);border:1px solid rgba(244,63,94,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8">
+          &#9432;&nbsp; Sesuai command <code style="color:#f43f5e;background:var(--surface3);padding:2px 6px;border-radius:4px">/offban</code> — hanya untuk <strong>pemain offline</strong>.
+          Durasi: <strong style="color:#f43f5e">1–30 hari</strong>. Admin tidak bisa di-ban. Pemain yang sudah di-ban tidak bisa di-ban lagi.
         </div>
-        <div class="form-group" style="margin-bottom:0">
-          <label>Durasi (hari) — min 1, max 30</label>
-          <input type="number" id="ban-days" placeholder="7" min="1" max="30"/>
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:700">Preset Durasi Ban</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <button class="btn btn-copy btn-sm" onclick="setBanDays(1)">1 Hari</button>
+            <button class="btn btn-copy btn-sm" onclick="setBanDays(3)">3 Hari</button>
+            <button class="btn btn-copy btn-sm" onclick="setBanDays(7)">7 Hari</button>
+            <button class="btn btn-copy btn-sm" onclick="setBanDays(14)">14 Hari</button>
+            <button class="btn btn-copy btn-sm" onclick="setBanDays(30)" style="border-color:rgba(244,63,94,0.4);color:#f43f5e">30 Hari (MAX)</button>
+          </div>
         </div>
-      </div>
-      <div class="form-group">
-        <label>Alasan Ban (opsional)</label>
-        <input type="text" id="ban-reason" placeholder="contoh: Cheating, bug abuse, dll..." maxlength="128"/>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Username Player</label>
+            <input type="text" id="ban-user" placeholder="Username pemain..."/>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Durasi (hari) — min 1, max 30</label>
+            <input type="number" id="ban-days" placeholder="7" min="1" max="30"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Alasan Ban (opsional, max 32 karakter)</label>
+          <input type="text" id="ban-reason" placeholder="contoh: Cheating, bug abuse, dll..." maxlength="32"/>
+        </div>
+        <button class="btn btn-sm" style="background:linear-gradient(135deg,#be123c,var(--red));color:#fff;border:none;padding:10px 24px;max-width:200px" onclick="doOffBan()">&#128683; BAN PEMAIN</button>
+        <div class="error-msg"   id="ban-err"></div>
+        <div class="success-msg" id="ban-ok"></div>
       </div>
 
-      <button class="btn btn-sm" style="background:linear-gradient(135deg,#be123c,var(--red));color:#fff;border:none;padding:10px 24px;max-width:200px" onclick="doOffBan()">&#128683; BAN PEMAIN</button>
-      <div class="error-msg"   id="ban-err"></div>
-      <div class="success-msg" id="ban-ok"></div>
-    </div>
-
-    <!-- Unban card -->
-    <div class="card">
-      <div class="card-title">&#9989; Unban Pemain</div>
-      <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2)">
-        &#9432;&nbsp; Set <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">lockstate=0</code> pada record ban aktif pemain di tabel <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">banlog</code>.
-      </div>
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-        <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
-          <label>Username Player</label>
-          <input type="text" id="unban-user" placeholder="Username pemain..."/>
+      <!-- Unban -->
+      <div class="card">
+        <div class="card-title">&#9989; Unban Pemain</div>
+        <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2)">
+          &#9432;&nbsp; Set <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">lockstate=0</code> pada record ban aktif di tabel <code style="color:var(--green);background:var(--surface3);padding:2px 6px;border-radius:4px">banlog</code>.
         </div>
-        <button class="btn btn-sm" style="height:44px;padding:0 20px;background:linear-gradient(135deg,#059669,var(--green));color:#fff;border:none" onclick="doUnban()">&#9989; UNBAN</button>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+            <label>Username Player</label>
+            <input type="text" id="unban-user" placeholder="Username pemain..."/>
+          </div>
+          <button class="btn btn-sm" style="height:44px;padding:0 20px;background:linear-gradient(135deg,#059669,var(--green));color:#fff;border:none" onclick="doUnban()">&#9989; UNBAN</button>
+        </div>
+        <div class="error-msg"   id="unban-err"></div>
+        <div class="success-msg" id="unban-ok"></div>
       </div>
-      <div class="error-msg"   id="unban-err"></div>
-      <div class="success-msg" id="unban-ok"></div>
+
     </div>
 
   </div>
@@ -4489,7 +4494,26 @@ async function loadInventory() {
 
 // ─── Punishment ───────────────────────────────────────────────────────────────
 
-function clearPunInfo() {
+function switchPunTab(tab) {
+  var jailEl   = document.getElementById('pun-tab-jail');
+  var banEl    = document.getElementById('pun-tab-ban');
+  var jailBtn  = document.getElementById('pun-tab-jail-btn');
+  var banBtn   = document.getElementById('pun-tab-ban-btn');
+  if (!jailEl || !banEl) return;
+  if (tab === 'jail') {
+    jailEl.style.display  = 'block';
+    banEl.style.display   = 'none';
+    jailBtn.className = 'btn btn-primary btn-sm';
+    banBtn.className  = 'btn btn-copy btn-sm';
+  } else {
+    jailEl.style.display  = 'none';
+    banEl.style.display   = 'block';
+    jailBtn.className = 'btn btn-copy btn-sm';
+    banBtn.className  = 'btn btn-primary btn-sm';
+  }
+}
+
+
   document.getElementById('pun-status-panel').style.display = 'none';
 }
 
