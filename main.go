@@ -1960,10 +1960,11 @@ func handleGetPropertyStats(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, 500, map[string]string{"error": "database not connected"})
 		return
 	}
-	var totalBizz, ownedBizz, totalHouse, ownedHouse, totalWorkshop, ownedWorkshop int
+	var totalBizz, ownedBizz, totalHouse, ownedHouse, totalWorkshop, ownedWorkshop, totalATM, activeATM int
 	db.QueryRow("SELECT COUNT(*), SUM(CASE WHEN bOwned=1 THEN 1 ELSE 0 END) FROM bizz").Scan(&totalBizz, &ownedBizz)
 	db.QueryRow("SELECT COUNT(*), SUM(CASE WHEN hOwned=1 THEN 1 ELSE 0 END) FROM house").Scan(&totalHouse, &ownedHouse)
 	db.QueryRow("SELECT COUNT(*), SUM(CASE WHEN owner != '-' AND owner != '' THEN 1 ELSE 0 END) FROM workshop").Scan(&totalWorkshop, &ownedWorkshop)
+	db.QueryRow("SELECT COUNT(*), SUM(CASE WHEN aActive=1 THEN 1 ELSE 0 END) FROM atms").Scan(&totalATM, &activeATM)
 	jsonResp(w, 200, map[string]any{
 		"total_bizz":      totalBizz,
 		"owned_bizz":      ownedBizz,
@@ -1971,6 +1972,58 @@ func handleGetPropertyStats(w http.ResponseWriter, r *http.Request) {
 		"owned_house":     ownedHouse,
 		"total_workshop":  totalWorkshop,
 		"owned_workshop":  ownedWorkshop,
+		"total_atm":       totalATM,
+		"active_atm":      activeATM,
+	})
+}
+
+func handleAddATM(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		AMoney      int64   `json:"aMoney"`
+		APosX       float64 `json:"aObjectPosX"`
+		APosY       float64 `json:"aObjectPosY"`
+		APosZ       float64 `json:"aObjectPosZ"`
+		APosA       float64 `json:"aObjectPosA"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.AMoney < 50_000_000 || req.AMoney > 1_000_000_000 {
+		jsonResp(w, 400, map[string]string{"error": "aMoney harus antara 50 juta dan 1 miliar"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	// Auto-increment aID
+	var maxID int
+	db.QueryRow("SELECT COALESCE(MAX(aID),0) FROM atms").Scan(&maxID)
+	newID := maxID + 1
+
+	_, err := db.Exec(
+		`INSERT INTO atms (aID, aActive, aMoney, aObjectPosX, aObjectPosY, aObjectPosZ, aObjectPosA)
+		 VALUES (?, 1, ?, ?, ?, ?, ?)`,
+		newID, req.AMoney, req.APosX, req.APosY, req.APosZ, req.APosA,
+	)
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal insert: " + err.Error()})
+		return
+	}
+
+	s, _ := getSession(r)
+	logAction(s.Username, fmt.Sprintf("Add ATM id=%d money=%d pos=(%.3f,%.3f,%.3f,%.3f)", newID, req.AMoney, req.APosX, req.APosY, req.APosZ, req.APosA))
+
+	jsonResp(w, 200, map[string]any{
+		"status": "created",
+		"aID":    newID,
+		"aMoney": req.AMoney,
 	})
 }
 
@@ -2052,33 +2105,33 @@ const htmlPage = `<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 /* ══════════════════════════════════════
-   DEWATA NATION RP — CYBERPUNK VIOLET
-   Premium Dark Theme v2.0
+   DEWATA NATION RP — OCEAN DEEP
+   Premium Dark Theme v3.0
 ══════════════════════════════════════ */
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap');
 
 :root{
-  /* Core palette */
-  --bg:         #07080f;
-  --surface:    #0d0e1a;
-  --surface2:   #111228;
-  --surface3:   #161830;
-  --surface4:   #1c1f3a;
+  /* Core palette — Ocean Deep */
+  --bg:         #030d14;
+  --surface:    #061520;
+  --surface2:   #091c2a;
+  --surface3:   #0c2234;
+  --surface4:   #102840;
 
   /* Borders */
-  --border:     #1e2048;
-  --border2:    #2a2d5a;
+  --border:     #0e3048;
+  --border2:    #164060;
 
-  /* Accent — Purple/Violet neon */
-  --accent:     #a855f7;
-  --accent2:    #7c3aed;
-  --accent3:    #c084fc;
-  --accentglow: rgba(168,85,247,0.22);
-  --accentglow2:rgba(168,85,247,0.08);
+  /* Accent — Cyan/Teal neon */
+  --accent:     #06b6d4;
+  --accent2:    #0891b2;
+  --accent3:    #67e8f9;
+  --accentglow: rgba(6,182,212,0.22);
+  --accentglow2:rgba(6,182,212,0.08);
 
-  /* Secondary accent — hot pink neon */
-  --pink:       #ec4899;
-  --pinkglow:   rgba(236,72,153,0.2);
+  /* Secondary accent — deep blue neon */
+  --pink:       #38bdf8;
+  --pinkglow:   rgba(56,189,248,0.2);
 
   /* Status */
   --red:        #f43f5e;
@@ -2087,9 +2140,9 @@ const htmlPage = `<!DOCTYPE html>
   --yellow:     #f59e0b;
 
   /* Text */
-  --text:       #e2e8f8;
-  --text2:      #a0aec8;
-  --textmuted:  #4a5580;
+  --text:       #e0f2fe;
+  --text2:      #7fb8d4;
+  --textmuted:  #2d6480;
 
   /* Layout */
   --sidebar:    268px;
@@ -2111,24 +2164,24 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 
-/* ── Cyberpunk background grid ── */
+/* ── Ocean Deep background ── */
 body::before{
   content:'';
   position:fixed;
   inset:0;
   background-image:
-    linear-gradient(rgba(168,85,247,0.03) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(168,85,247,0.03) 1px,transparent 1px);
-  background-size:40px 40px;
+    linear-gradient(rgba(6,182,212,0.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(6,182,212,0.025) 1px,transparent 1px);
+  background-size:44px 44px;
   pointer-events:none;
   z-index:0;
 }
 body::after{
   content:'';
   position:fixed;
-  top:-30vh;left:-20vw;
-  width:70vw;height:70vh;
-  background:radial-gradient(ellipse,rgba(124,58,237,0.12),transparent 65%);
+  top:-25vh;left:-15vw;
+  width:75vw;height:75vh;
+  background:radial-gradient(ellipse,rgba(6,182,212,0.10) 0%,rgba(8,145,178,0.06) 40%,transparent 70%);
   pointer-events:none;
   z-index:0;
 }
@@ -2150,7 +2203,7 @@ body::after{
 .loading-logo{
   width:clamp(80px,20vw,110px);height:clamp(80px,20vw,110px);
   border-radius:20px;object-fit:cover;
-  box-shadow:0 0 0 1px var(--border2),0 0 40px var(--accentglow),0 0 80px rgba(168,85,247,0.1);
+  box-shadow:0 0 0 1px var(--border2),0 0 40px var(--accentglow),0 0 80px rgba(6,182,212,0.1);
 }
 .loading-title{
   font-family:'Orbitron',sans-serif;
@@ -2191,13 +2244,13 @@ body::after{
   padding:clamp(24px,5vw,40px);
   width:100%;max-width:430px;
   position:relative;overflow:hidden;margin:auto;
-  box-shadow:0 0 0 1px rgba(168,85,247,0.1),0 32px 80px rgba(0,0,0,0.6),0 0 60px rgba(124,58,237,0.08);
+  box-shadow:0 0 0 1px rgba(6,182,212,0.1),0 32px 80px rgba(0,0,0,0.6),0 0 60px rgba(8,145,178,0.08);
 }
 .auth-box::before{
   content:'';position:absolute;
   top:-80px;right:-80px;
   width:220px;height:220px;
-  background:radial-gradient(circle,rgba(168,85,247,0.18),transparent 65%);
+  background:radial-gradient(circle,rgba(6,182,212,0.18),transparent 65%);
   pointer-events:none;
 }
 .auth-box::after{
@@ -2244,7 +2297,7 @@ body::after{
 }
 .form-group input:focus,.form-group select:focus{
   border-color:var(--accent);
-  box-shadow:0 0 0 3px rgba(168,85,247,0.12),inset 0 0 12px rgba(168,85,247,0.04);
+  box-shadow:0 0 0 3px rgba(6,182,212,0.12),inset 0 0 12px rgba(6,182,212,0.04);
 }
 .form-group input::placeholder{color:var(--textmuted)}
 .form-group select{
@@ -2270,13 +2323,13 @@ body::after{
 .btn-primary{
   background:linear-gradient(135deg,var(--accent2),var(--accent),var(--accent3));
   color:#fff;
-  box-shadow:0 4px 20px rgba(168,85,247,0.35);
+  box-shadow:0 4px 20px rgba(6,182,212,0.35);
 }
 .btn-primary:hover{
   transform:translateY(-2px);
-  box-shadow:0 8px 32px rgba(168,85,247,0.5),0 0 0 1px rgba(168,85,247,0.3);
+  box-shadow:0 8px 32px rgba(6,182,212,0.5),0 0 0 1px rgba(6,182,212,0.3);
 }
-.btn-primary:active{transform:translateY(0);box-shadow:0 2px 10px rgba(168,85,247,0.3)}
+.btn-primary:active{transform:translateY(0);box-shadow:0 2px 10px rgba(6,182,212,0.3)}
 .btn-danger{background:linear-gradient(135deg,#e11d48,var(--red));color:#fff;padding:9px 16px;width:auto;font-size:13px;border-radius:var(--radius-sm);letter-spacing:1px;box-shadow:0 4px 16px rgba(244,63,94,0.3)}
 .btn-danger:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(244,63,94,0.45)}
 .btn-sm{padding:9px 16px;width:auto;font-size:13px;border-radius:var(--radius-sm);letter-spacing:1px}
@@ -2287,7 +2340,7 @@ body::after{
 }
 .btn-copy:hover{
   background:var(--accentglow2);
-  border-color:rgba(168,85,247,0.4);
+  border-color:rgba(6,182,212,0.4);
   color:var(--accent);
 }
 .auth-error{
@@ -2304,7 +2357,7 @@ body::after{
 /* ── Sidebar ── */
 #sidebar{
   width:var(--sidebar);
-  background:linear-gradient(180deg,var(--surface) 0%,#0a0b18 100%);
+  background:linear-gradient(180deg,var(--surface) 0%,#020e18 100%);
   border-right:1px solid var(--border);
   display:flex;flex-direction:column;
   transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);
@@ -2323,13 +2376,13 @@ body::after{
   padding:18px 16px;
   border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:12px;flex-shrink:0;
-  background:rgba(168,85,247,0.03);
+  background:rgba(6,182,212,0.03);
 }
 .sidebar-logo-wrap{
   width:40px;height:40px;border-radius:10px;overflow:hidden;flex-shrink:0;
   background:var(--surface3);display:flex;align-items:center;justify-content:center;
   border:1px solid var(--border2);
-  box-shadow:0 0 12px rgba(168,85,247,0.15);
+  box-shadow:0 0 12px rgba(6,182,212,0.15);
 }
 .sidebar-logo{width:100%;height:100%;object-fit:cover;display:block}
 .sidebar-logo-fallback{font-size:20px;line-height:1}
@@ -2363,10 +2416,10 @@ body::after{
 }
 .nav-item:active{transform:scale(0.98)}
 .nav-item.active{
-  background:linear-gradient(135deg,rgba(168,85,247,0.15),rgba(124,58,237,0.08));
+  background:linear-gradient(135deg,rgba(6,182,212,0.15),rgba(8,145,178,0.08));
   color:var(--accent3);
-  border-color:rgba(168,85,247,0.25);
-  box-shadow:inset 0 0 20px rgba(168,85,247,0.05),0 0 0 1px rgba(168,85,247,0.1);
+  border-color:rgba(6,182,212,0.25);
+  box-shadow:inset 0 0 20px rgba(6,182,212,0.05),0 0 0 1px rgba(6,182,212,0.1);
 }
 .nav-item.active .nav-icon{
   filter:drop-shadow(0 0 6px var(--accentglow));
@@ -2404,7 +2457,7 @@ body::after{
 #topbar::after{
   content:'';position:absolute;
   bottom:0;left:0;right:0;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(168,85,247,0.3),transparent);
+  background:linear-gradient(90deg,transparent,rgba(6,182,212,0.3),transparent);
 }
 #menu-toggle{
   background:var(--surface3);
@@ -2417,7 +2470,7 @@ body::after{
 }
 #menu-toggle:hover{
   background:var(--accentglow2);
-  border-color:rgba(168,85,247,0.4);
+  border-color:rgba(6,182,212,0.4);
   color:var(--accent);
 }
 .topbar-title{
@@ -2460,7 +2513,7 @@ body::after{
 .card::before{
   content:'';position:absolute;
   top:0;left:0;right:0;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(168,85,247,0.2),transparent);
+  background:linear-gradient(90deg,transparent,rgba(6,182,212,0.2),transparent);
   pointer-events:none;
 }
 .card:hover{border-color:var(--border2)}
@@ -2502,7 +2555,7 @@ body::after{
   font-size:12px;font-family:'Rajdhani',sans-serif;letter-spacing:1px;
   cursor:pointer;transition:all 0.2s;font-weight:600;touch-action:manipulation;
 }
-.info-copy-btn:hover{background:var(--accentglow2);border-color:rgba(168,85,247,0.4);color:var(--accent)}
+.info-copy-btn:hover{background:var(--accentglow2);border-color:rgba(6,182,212,0.4);color:var(--accent)}
 
 /* ── Table ── */
 .table-wrap{
@@ -2524,12 +2577,12 @@ tbody td{
   vertical-align:middle;
 }
 tbody tr:last-child td{border-bottom:none}
-tbody tr:hover{background:rgba(168,85,247,0.03)}
+tbody tr:hover{background:rgba(6,182,212,0.03)}
 .cord-text{font-family:monospace;font-size:11px;color:var(--accent3)}
 .badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:1px}
 .badge-green{background:rgba(16,185,129,0.12);color:var(--green);border:1px solid rgba(16,185,129,0.25)}
 .badge-blue{background:rgba(59,130,246,0.12);color:var(--blue);border:1px solid rgba(59,130,246,0.25)}
-.badge-purple{background:rgba(168,85,247,0.12);color:var(--accent3);border:1px solid rgba(168,85,247,0.25)}
+.badge-purple{background:rgba(6,182,212,0.12);color:var(--accent3);border:1px solid rgba(6,182,212,0.25)}
 
 /* ── Set Form ── */
 .set-card{
@@ -2580,7 +2633,7 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
   background:var(--surface3);border:1px solid var(--border2);
   border-radius:12px;padding:13px 18px;
   font-size:13px;font-weight:600;
-  box-shadow:0 16px 48px rgba(0,0,0,0.6),0 0 0 1px rgba(168,85,247,0.1);
+  box-shadow:0 16px 48px rgba(0,0,0,0.6),0 0 0 1px rgba(6,182,212,0.1);
   z-index:9999;transform:translateY(100px);opacity:0;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);
 }
 #toast.show{transform:translateY(0);opacity:1}
@@ -2603,7 +2656,7 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
 @keyframes accentpulse{0%,100%{opacity:0.6}50%{opacity:1}}
 
 /* ── Glow dividers ── */
-.glow-line{height:1px;background:linear-gradient(90deg,transparent,rgba(168,85,247,0.5),transparent);margin:16px 0}
+.glow-line{height:1px;background:linear-gradient(90deg,transparent,rgba(6,182,212,0.5),transparent);margin:16px 0}
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar{width:4px;height:4px}
@@ -3430,13 +3483,19 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
         <div style="font-family:Orbitron,sans-serif;font-size:28px;font-weight:700;color:var(--yellow)" id="stat-workshop-total">—</div>
         <div style="font-size:11px;color:var(--textmuted);margin-top:4px" id="stat-workshop-owned">— dimiliki</div>
       </div>
+      <div class="info-card" style="text-align:center">
+        <div class="info-label">Total ATM</div>
+        <div style="font-family:Orbitron,sans-serif;font-size:28px;font-weight:700;color:#22d3ee" id="stat-atm-total">—</div>
+        <div style="font-size:11px;color:var(--textmuted);margin-top:4px" id="stat-atm-active">— aktif</div>
+      </div>
     </div>
 
     <!-- Tab switcher -->
-    <div style="display:flex;gap:8px;margin-bottom:20px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
       <button class="btn btn-primary btn-sm" id="tab-bizz-btn"     onclick="switchPropTab('bizz')">&#127981; Add Bisnis</button>
       <button class="btn btn-copy btn-sm"    id="tab-house-btn"    onclick="switchPropTab('house')">&#127968; Add Rumah</button>
       <button class="btn btn-copy btn-sm"    id="tab-workshop-btn" onclick="switchPropTab('workshop')">&#128295; Add Workshop</button>
+      <button class="btn btn-copy btn-sm"    id="tab-atm-btn"      onclick="switchPropTab('atm')">&#127967; Add ATM</button>
     </div>
 
     <!-- ═══ ADD BISNIS ═══ -->
@@ -3633,6 +3692,48 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
       </div>
     </div>
 
+    <!-- ═══ ADD ATM ═══ -->
+    <div id="prop-tab-atm" style="display:none">
+      <div class="card">
+        <div class="card-title" style="color:#22d3ee">&#127967; Add ATM Baru</div>
+
+        <div class="form-group">
+          <label>aMoney — Uang ATM (min 50jt, max 1 Miliar)</label>
+          <input type="number" id="atm-money" placeholder="50000000" min="50000000" max="1000000000"/>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:10px;font-weight:700">Koordinat Posisi ATM</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>aObjectPosX</label>
+              <input type="number" id="atm-x" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>aObjectPosY</label>
+              <input type="number" id="atm-y" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>aObjectPosZ</label>
+              <input type="number" id="atm-z" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>aObjectPosA (Angle/Rotasi)</label>
+              <input type="number" id="atm-a" placeholder="0.0" step="0.001"/>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--textmuted);line-height:1.7">
+          &#9432; Default: <span style="color:var(--text2)">aActive=1</span> (langsung aktif). aID di-auto-increment dari ID terakhir di tabel.
+        </div>
+
+        <button class="btn btn-primary" style="max-width:220px;background:linear-gradient(135deg,#0e7490,#22d3ee);color:#fff" onclick="addATM()">&#43; ADD ATM</button>
+        <div class="error-msg"   id="atm-err"></div>
+        <div class="success-msg" id="atm-ok"></div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -3674,7 +3775,7 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
       <!-- Off Jail -->
       <div class="card" style="margin-bottom:16px">
         <div class="card-title">&#9939; Set Penjara (Off Jail)</div>
-        <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8">
+        <div style="background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8">
           &#9432;&nbsp; Sesuai command <code style="color:var(--accent3);background:var(--surface3);padding:2px 6px;border-radius:4px">/offjail</code> — hanya untuk <strong>pemain offline</strong>.
           Durasi: <strong style="color:var(--accent3)">10–300 menit</strong>. Pemain yang sudah di penjara atau admin tidak bisa di-jail.
         </div>
@@ -3698,7 +3799,7 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
             <label>Durasi (menit) — min 10, max 300</label>
             <input type="number" id="jail-mins" placeholder="60" min="10" max="300"/>
           </div>
-          <button class="btn btn-primary btn-sm" style="height:44px;padding:0 20px;background:linear-gradient(135deg,#7c3aed,#a855f7)" onclick="doOffJail()">&#9939; JAIL</button>
+          <button class="btn btn-primary btn-sm" style="height:44px;padding:0 20px;background:linear-gradient(135deg,var(--accent2),var(--accent))" onclick="doOffJail()">&#9939; JAIL</button>
         </div>
         <div class="error-msg"   id="jail-err"></div>
         <div class="success-msg" id="jail-ok"></div>
@@ -4176,12 +4277,12 @@ async function setProp(type, userEl, valEl, okEl, errEl) {
 
 // ─── Set VIP ──────────────────────────────────────────────────────────────────
 var vipLabels = {0:'Non-VIP', 1:'VIP Low', 2:'VIP Medium', 3:'VIP High'};
-var vipColors = {0:'var(--textmuted)', 1:'#c084fc', 2:'#a855f7', 3:'#a855f7'};
+var vipColors = {0:'var(--textmuted)', 1:'var(--accent3)', 2:'var(--accent)', 3:'var(--accent)'};
 var vipBadgeBg = {
   0:'rgba(100,120,140,0.15)',
   1:'rgba(79,195,247,0.12)',
   2:'rgba(41,182,246,0.15)',
-  3:'rgba(168,85,247,0.18)'
+  3:'rgba(6,182,212,0.18)'
 };
 
 function clearVipInfo() {
@@ -4303,7 +4404,7 @@ async function previewGunSlots() {
           '<div>Kosong</div></div>';
       } else {
         var name = gunNames[gid] || ('ID '+gid);
-        html += '<div style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--accent);min-width:80px;text-align:center">'+
+        html += '<div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.3);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--accent);min-width:80px;text-align:center">'+
           '<div style="font-weight:700;margin-bottom:2px">Slot '+(i+1)+'</div>'+
           '<div style="color:var(--text);font-size:12px;font-weight:600">'+escHtml(name)+'</div>'+
           '<div style="color:var(--textmuted)">'+am+' peluru</div></div>';
@@ -4398,7 +4499,7 @@ async function previewVehSlots() {
             break;
           }
         }
-        html += '<div style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--accent);min-width:100px;text-align:center">'+
+        html += '<div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.3);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--accent);min-width:100px;text-align:center">'+
           '<div style="font-size:22px;margin-bottom:4px">'+getVehIcon(vid)+'</div>'+
           '<div style="font-weight:700;margin-bottom:2px">Slot '+(i+1)+'</div>'+
           '<div style="color:var(--text);font-size:12px;font-weight:600">'+escHtml(vname)+'</div>'+
@@ -4466,7 +4567,7 @@ var invWeaponNames = {
 };
 
 var invVipLabel = {0:'Non-VIP',1:'VIP Low',2:'VIP Medium',3:'VIP High'};
-var invVipColor = {0:'var(--textmuted)',1:'#c084fc',2:'#a855f7',3:'#a855f7'};
+var invVipColor = {0:'var(--textmuted)',1:'var(--accent3)',2:'var(--accent)',3:'var(--accent)'};
 
 function invMoneyCard(label, val, color) {
   color = color || 'var(--accent)';
@@ -4527,7 +4628,7 @@ async function loadInventory() {
     // Badges
     var badges = '';
     var vCol = invVipColor[d.pVip] || 'var(--textmuted)';
-    if (d.pVip > 0) badges += '<span style="background:rgba(168,85,247,0.12);border:1px solid '+vCol+';border-radius:99px;padding:3px 10px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700;color:'+vCol+'">'+escHtml(invVipLabel[d.pVip])+'</span>';
+    if (d.pVip > 0) badges += '<span style="background:rgba(6,182,212,0.12);border:1px solid '+vCol+';border-radius:99px;padding:3px 10px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700;color:'+vCol+'">'+escHtml(invVipLabel[d.pVip])+'</span>';
     if (d.pWanted > 0) badges += '<span style="background:rgba(232,48,48,0.12);border:1px solid var(--red);border-radius:99px;padding:3px 10px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700;color:var(--red)">WANTED '+d.pWanted+'</span>';
     if (d.pPrison > 0) badges += '<span style="background:rgba(106,128,153,0.15);border:1px solid var(--textmuted);border-radius:99px;padding:3px 10px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700;color:var(--textmuted)">PENJARA</span>';
     if (d.pCS > 0)     badges += '<span style="background:rgba(32,192,96,0.1);border:1px solid var(--green);border-radius:99px;padding:3px 10px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700;color:var(--green)">Custom Skin</span>';
@@ -4548,8 +4649,8 @@ async function loadInventory() {
       invMoneyCard('pCash (Uang Cash)', d.pCash, '#20c060') +
       invMoneyCard('pBank (Uang Bank)', d.pBank, '#2088e8') +
       invMoneyCard('pUangMerah', d.pUangMerah, '#e83030') +
-      invMoneyCard('pRouble (Coin)', d.pRouble, '#a855f7') +
-      invMoneyCard('pGopay', d.pGopay, '#c084fc');
+      invMoneyCard('pRouble (Coin)', d.pRouble, 'var(--accent)') +
+      invMoneyCard('pGopay', d.pGopay, 'var(--accent3)');
 
     // ── Weapons ──
     var guns  = d.pGun.split(',');
@@ -4562,7 +4663,7 @@ async function loadInventory() {
       if (gid === 0) continue;
       hasWeapon = true;
       var wname = invWeaponNames[gid] || ('ID '+gid);
-      wHtml += '<div style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.25);border-radius:10px;padding:10px 14px;min-width:130px">'+
+      wHtml += '<div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.25);border-radius:10px;padding:10px 14px;min-width:130px">'+
         '<div style="font-size:11px;color:var(--textmuted);margin-bottom:4px">Slot '+(i+1)+' &bull; ID '+gid+'</div>'+
         '<div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--accent)">&#128299; '+escHtml(wname)+'</div>'+
         '<div style="font-size:12px;color:var(--textmuted);margin-top:2px">Ammo: <strong style="color:var(--text)">'+am+'</strong></div>'+
@@ -4587,7 +4688,7 @@ async function loadInventory() {
           }
         }
       }
-      vHtml += '<div style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.25);border-radius:10px;padding:10px 14px;min-width:130px">'+
+      vHtml += '<div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.25);border-radius:10px;padding:10px 14px;min-width:130px">'+
         '<div style="font-size:11px;color:var(--textmuted);margin-bottom:4px">Slot '+(i+1)+'</div>'+
         '<div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--accent)">&#128663; '+escHtml(vname)+'</div>'+
         '<div style="font-size:12px;color:var(--textmuted);margin-top:2px">ID: '+vid+'</div>'+
@@ -4669,6 +4770,42 @@ async function addWorkshop() {
     document.getElementById('ws-z').value = '';
     loadPropStats();
   } catch(e) { showMsg('ws-err', 'Koneksi error'); }
+}
+
+// ─── Add ATM ──────────────────────────────────────────────────────────────────
+
+async function addATM() {
+  var money = parseInt(document.getElementById('atm-money').value);
+  var x     = parseFloat(document.getElementById('atm-x').value);
+  var y     = parseFloat(document.getElementById('atm-y').value);
+  var z     = parseFloat(document.getElementById('atm-z').value);
+  var a     = parseFloat(document.getElementById('atm-a').value);
+
+  resetMsg('atm-err', 'atm-ok');
+  if (isNaN(money) || money < 50000000 || money > 1000000000)
+    { showMsg('atm-err', 'aMoney harus antara 50 juta - 1 miliar'); return; }
+  if (isNaN(x) || isNaN(y) || isNaN(z) || isNaN(a))
+    { showMsg('atm-err', 'Koordinat X, Y, Z, A wajib diisi'); return; }
+
+  try {
+    var r = await fetch('/api/property/add-atm', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({aMoney: money, aObjectPosX: x, aObjectPosY: y, aObjectPosZ: z, aObjectPosA: a})
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('atm-err', d.error || 'Gagal tambah ATM'); return; }
+
+    var moneyFmt = new Intl.NumberFormat('id-ID').format(d.aMoney);
+    showMsg('atm-ok', 'ATM berhasil ditambahkan! ID: ' + d.aID + ' | Rp ' + moneyFmt);
+    showToast('ATM #' + d.aID + ' berhasil dibuat!', 'success');
+    document.getElementById('atm-money').value = '';
+    document.getElementById('atm-x').value = '';
+    document.getElementById('atm-y').value = '';
+    document.getElementById('atm-z').value = '';
+    document.getElementById('atm-a').value = '';
+    loadPropStats();
+  } catch(e) { showMsg('atm-err', 'Koneksi error'); }
 }
 
 // ─── Punishment ───────────────────────────────────────────────────────────────
@@ -4931,8 +5068,8 @@ var adminLevelNames = {
 };
 var adminLevelColors = {
   1:'var(--textmuted)', 2:'var(--text)', 3:'var(--text)', 4:'var(--text)',
-  5:'var(--text)', 6:'var(--text)', 7:'var(--text)', 8:'#c084fc',
-  9:'#a855f7', 10:'var(--accent)', 15:'#f0a030', 20:'var(--red)'
+  5:'var(--text)', 6:'var(--text)', 7:'var(--text)', 8:'var(--accent3)',
+  9:'var(--accent)', 10:'var(--accent)', 15:'#f0a030', 20:'var(--red)'
 };
 
 function clearSaInfo() {
@@ -5053,7 +5190,7 @@ async function loadAdminList() {
       var dateStr  = a.invite_date ? a.invite_date.replace('T',' ').substring(0,10) : '-';
       return '<tr>'+
         '<td style="font-weight:600;color:var(--text)">'+escHtml(a.Name)+'</td>'+
-        '<td><span class="badge" style="background:rgba(168,85,247,0.1);color:'+lvlColor+';border:1px solid '+lvlColor+';border-radius:6px;padding:2px 8px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700">'+a.pAdmin+'</span></td>'+
+        '<td><span class="badge" style="background:rgba(6,182,212,0.1);color:'+lvlColor+';border:1px solid '+lvlColor+';border-radius:6px;padding:2px 8px;font-size:11px;font-family:Rajdhani,sans-serif;font-weight:700">'+a.pAdmin+'</span></td>'+
         '<td style="color:'+lvlColor+';font-size:12px;font-weight:600">'+escHtml(lvlName)+'</td>'+
         '<td style="color:var(--accent);font-size:13px">'+escHtml(a.pAname)+'</td>'+
         '<td style="color:var(--green)">'+a.pAdmRep+'</td>'+
@@ -5077,29 +5214,17 @@ function quickEditAdmin(name) {
 // ─── Add Property ─────────────────────────────────────────────────────────────
 
 function switchPropTab(tab) {
-  var bizzTab     = document.getElementById('prop-tab-bizz');
-  var houseTab    = document.getElementById('prop-tab-house');
-  var workshopTab = document.getElementById('prop-tab-workshop');
-  var bizzBtn     = document.getElementById('tab-bizz-btn');
-  var houseBtn    = document.getElementById('tab-house-btn');
-  var workshopBtn = document.getElementById('tab-workshop-btn');
-  if (!bizzTab || !houseTab || !workshopTab) return;
-  bizzTab.style.display     = 'none';
-  houseTab.style.display    = 'none';
-  workshopTab.style.display = 'none';
-  bizzBtn.className     = 'btn btn-copy btn-sm';
-  houseBtn.className    = 'btn btn-copy btn-sm';
-  workshopBtn.className = 'btn btn-copy btn-sm';
-  if (tab === 'bizz') {
-    bizzTab.style.display = 'block';
-    bizzBtn.className = 'btn btn-primary btn-sm';
-  } else if (tab === 'house') {
-    houseTab.style.display = 'block';
-    houseBtn.className = 'btn btn-primary btn-sm';
-  } else {
-    workshopTab.style.display = 'block';
-    workshopBtn.className = 'btn btn-primary btn-sm';
-  }
+  var tabs = ['bizz','house','workshop','atm'];
+  tabs.forEach(function(t) {
+    var el  = document.getElementById('prop-tab-'+t);
+    var btn = document.getElementById('tab-'+t+'-btn');
+    if (el)  el.style.display = 'none';
+    if (btn) btn.className = 'btn btn-copy btn-sm';
+  });
+  var active    = document.getElementById('prop-tab-'+tab);
+  var activeBtn = document.getElementById('tab-'+tab+'-btn');
+  if (active)    active.style.display = 'block';
+  if (activeBtn) activeBtn.className  = 'btn btn-primary btn-sm';
 }
 
 async function loadPropStats() {
@@ -5114,6 +5239,8 @@ async function loadPropStats() {
     if (el('stat-house-owned'))    el('stat-house-owned').textContent    = (d.owned_house || 0) + ' dimiliki';
     if (el('stat-workshop-total')) el('stat-workshop-total').textContent = d.total_workshop || 0;
     if (el('stat-workshop-owned')) el('stat-workshop-owned').textContent = (d.owned_workshop || 0) + ' dimiliki';
+    if (el('stat-atm-total'))      el('stat-atm-total').textContent      = d.total_atm || 0;
+    if (el('stat-atm-active'))     el('stat-atm-active').textContent     = (d.active_atm || 0) + ' aktif';
   } catch(e) {}
 }
 
@@ -5535,6 +5662,7 @@ func main() {
 	mux.HandleFunc("/api/property/add-bizz",    protected(handleAddBizz))
 	mux.HandleFunc("/api/property/add-house",   protected(handleAddHouse))
 	mux.HandleFunc("/api/property/add-workshop",protected(handleAddWorkshop))
+	mux.HandleFunc("/api/property/add-atm",     protected(handleAddATM))
 	mux.HandleFunc("/api/property/stats",       protected(handleGetPropertyStats))
 	mux.HandleFunc("/api/punishment/jail",      protected(handleOffJail))
 	mux.HandleFunc("/api/punishment/free",      protected(handleFreeJail))
