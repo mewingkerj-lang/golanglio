@@ -2186,6 +2186,7 @@ body::after{
   z-index:0;
 }
 #loading-screen,#auth-wrapper,#app{position:relative;z-index:1}
+#loading-screen,#auth-wrapper{isolation:isolate}
 
 /* ── Loading ── */
 #loading-screen{
@@ -2353,6 +2354,28 @@ body::after{
 /* ── App Layout ── */
 #app{display:none;min-height:100vh}
 #app.visible{display:flex}
+
+/* ── Video Background ── */
+#bg-video{
+  position:fixed;
+  inset:0;
+  width:100%;height:100%;
+  object-fit:cover;
+  z-index:0;
+  opacity:0;
+  transition:opacity 1.2s ease;
+  pointer-events:none;
+}
+#bg-video.show{opacity:0.18}
+#bg-overlay{
+  position:fixed;
+  inset:0;
+  background:linear-gradient(135deg,rgba(3,13,20,0.82),rgba(6,21,32,0.75));
+  z-index:0;
+  display:none;
+  pointer-events:none;
+}
+#bg-overlay.show{display:block}
 
 /* ── Sidebar ── */
 #sidebar{
@@ -2760,6 +2783,11 @@ tbody tr:hover{background:rgba(6,182,212,0.03)}
 </div>
 
 <!-- App -->
+<!-- Background Video -->
+<video id="bg-video" src="https://image2url.com/r2/default/videos/1772115534273-4720cebc-38f7-4631-a49e-41f95bd6da45.mp4"
+  autoplay loop muted playsinline preload="auto"></video>
+<div id="bg-overlay"></div>
+
 <div id="app">
   <!-- Sidebar Overlay (mobile) -->
   <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
@@ -4076,6 +4104,10 @@ async function doLogout() {
   currentUser = '';
   document.getElementById('app').style.display = 'none';
   document.getElementById('app').classList.remove('visible');
+  var bgv = document.getElementById('bg-video');
+  var bgo = document.getElementById('bg-overlay');
+  if (bgv) { bgv.classList.remove('show'); bgv.pause(); }
+  if (bgo) bgo.classList.remove('show');
   showAuth();
 }
 
@@ -4104,6 +4136,11 @@ function enterApp(username) {
     snd.volume = 0.7;
     snd.play().catch(function() {});
   } catch(e) {}
+  // Show background video
+  var bgv = document.getElementById('bg-video');
+  var bgo = document.getElementById('bg-overlay');
+  if (bgv) { bgv.classList.add('show'); bgv.play().catch(function(){}); }
+  if (bgo) bgo.classList.add('show');
 }
 
 // ─── Sidebar ───────────────────────────────────────────────────────────────────
