@@ -2887,399 +2887,414 @@ tbody tr:hover{background:rgba(6,182,212,0.03)}
       <!-- Set Menu Page -->
       <div class="page" id="page-set">
         <div class="page-title">⚙️ Set Menu</div>
-        <div class="page-sub">Kelola data pemain: uang, item, akun, dan properti.</div>
+        <div class="page-sub">Kelola data pemain — pilih kategori di bawah.</div>
 
-        <!-- Set Money -->
-        <div class="card">
-          <div class="card-title">💰 Set Uang Pemain</div>
-          <div class="input-row">
-            <div class="form-group"><label>Username</label><input type="text" id="money-user" placeholder="Username..."/></div>
-            <div class="form-group"><label>Value</label><input type="number" id="money-val" placeholder="0" min="0" max="500000000"/></div>
-            <div class="form-group"><label>Type</label>
-              <select id="money-type" onchange="updateMoneyMax()">
-                <option value="pCash" data-max="500000000">pCash — Uang Cash (max 500jt)</option>
-                <option value="pBank" data-max="500000000">pBank — Uang Bank (max 500jt)</option>
-                <option value="pUangMerah" data-max="500000000">pUangMerah — Uang Merah (max 500jt)</option>
-                <option value="pRouble" data-max="1000">pRouble — Donate Coin (max 1.000)</option>
-              </select>
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="setMoney()" style="flex-shrink:0;margin-bottom:0">SET</button>
-          </div>
-          <div id="money-limit-info" style="font-size:12px;color:var(--textmuted);margin-bottom:4px">Limit: <strong style="color:var(--accent)">500.000.000</strong></div>
-          <div class="error-msg" id="money-err"></div>
-          <div class="success-msg" id="money-ok"></div>
+        <!-- Tab switcher -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px">
+          <button class="btn btn-primary btn-sm" id="set-tab-uang-btn"      onclick="switchSetTab('uang')"     >💰 Uang</button>
+          <button class="btn btn-copy btn-sm"    id="set-tab-item-btn"      onclick="switchSetTab('item')"     >🎒 Item</button>
+          <button class="btn btn-copy btn-sm"    id="set-tab-akun-btn"      onclick="switchSetTab('akun')"     >🗃️ Akun</button>
+          <button class="btn btn-copy btn-sm"    id="set-tab-properti-btn"  onclick="switchSetTab('properti')" >🔧 Properti</button>
+          <button class="btn btn-copy btn-sm"    id="set-tab-vip-btn"       onclick="switchSetTab('vip')"      >⭐ VIP</button>
+          <button class="btn btn-copy btn-sm"    id="set-tab-senjata-btn"   onclick="switchSetTab('senjata')"  >🔫 Senjata</button>
+          <button class="btn btn-copy btn-sm"    id="set-tab-kendaraan-btn" onclick="switchSetTab('kendaraan')">🚗 Kendaraan</button>
         </div>
 
-        <!-- Set Item -->
-        <div class="card">
-          <div class="card-title">🎒 Set Item Pemain</div>
-          <div class="input-row">
-            <div class="form-group"><label>Username</label><input type="text" id="item-user" placeholder="Username..."/></div>
-            <div class="form-group"><label>Value (max 1.000)</label><input type="number" id="item-val" placeholder="0" min="0" max="1000"/></div>
-            <div class="form-group"><label>Type</label>
-              <select id="item-type">
-                <option value="pBatu">pBatu — Batu Bersih</option>
-                <option value="pBatuk">pBatuk — Batu Kotor</option>
-                <option value="pFish">pFish — Ikan</option>
-                <option value="pPenyu">pPenyu — Penyu</option>
-                <option value="pDolphin">pDolphin — Dolpin</option>
-                <option value="pHiu">pHiu — Hiu</option>
-                <option value="pMegalodon">pMegalodon — Megalodon</option>
-                <option value="pCaught">pCaught — Umpan Mancing</option>
-                <option value="pPadi">pPadi — Padi</option>
-                <option value="pAyam">pAyam — Ayam</option>
-                <option value="pSemen">pSemen — Semen</option>
-                <option value="pEmas">pEmas — Emas</option>
-                <option value="pSusu">pSusu — Susu Sapi</option>
-                <option value="pMinyak">pMinyak — Minyak</option>
-                <option value="pAyamKemas">pAyamKemas — Ayam Kemas</option>
-                <option value="pAyamPotong">pAyamPotong — Ayam Potong</option>
-                <option value="pAyamHidup">pAyamHidup — Ayam Hidup</option>
-                <option value="pBulu">pBulu — Bulu Ayam</option>
-              </select>
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="setItem()" style="flex-shrink:0;margin-bottom:0">SET</button>
-          </div>
-          <div style="font-size:12px;color:var(--textmuted);margin-bottom:4px">Limit semua item: <strong style="color:var(--accent)">1.000</strong></div>
-          <div class="error-msg" id="item-err"></div>
-          <div class="success-msg" id="item-ok"></div>
-        </div>
-
-        <!-- Set Account -->
-        <div class="card">
-          <div class="card-title">🗃️ Set Akun Pemain</div>
-          <div class="input-row">
-            <div class="form-group"><label>Username</label><input type="text" id="acc-user" placeholder="Username..."/></div>
-            <div class="form-group"><label>Value</label><input type="number" id="acc-val" placeholder="0" min="0" max="5000"/></div>
-            <div class="form-group"><label>Type</label>
-              <select id="acc-type" onchange="updateAccMax()">
-                <option value="pDrugs"     data-max="500" >pDrugs — Drugs (max 500)</option>
-                <option value="pMicin"     data-max="500" >pMicin — Marijuana (max 500)</option>
-                <option value="pSteroid"   data-max="500" >pSteroid — Steroid (max 500)</option>
-                <option value="pComponent" data-max="5000">pComponent — Component (max 5.000)</option>
-                <option value="pMetall"    data-max="5000">pMetall — Besi (max 5.000)</option>
-                <option value="pFood"      data-max="200" >pFood — Makanan (max 200)</option>
-                <option value="pDrink"     data-max="200" >pDrink — Minuman (max 200)</option>
-              </select>
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="setAccount()" style="flex-shrink:0;margin-bottom:0">SET</button>
-          </div>
-          <div id="acc-limit-info" style="font-size:12px;color:var(--textmuted);margin-bottom:4px">Limit: <strong style="color:var(--accent)" id="acc-limit-val">500</strong></div>
-          <div class="error-msg" id="acc-err"></div>
-          <div class="success-msg" id="acc-ok"></div>
-        </div>
-
-        <!-- Set Property -->
-        <div class="card">
-          <div class="card-title">🔧 Set Properti Pemain</div>
-          <div class="prop-grid" id="prop-grid">
-            <!-- pSkin -->
-            <div class="set-card">
-              <div class="set-title">🎭 Set Skin</div>
-              <div class="form-group"><label>Username</label><input type="text" id="prop-skin-user" placeholder="Username..."/></div>
-              <div class="form-group"><label>Skin ID</label><input type="number" id="prop-skin-val" placeholder="0"/></div>
-              <button class="btn btn-primary" onclick="setProp('pSkin','prop-skin-user','prop-skin-val','prop-skin-msg','prop-skin-err')">SET SKIN</button>
-              <div class="error-msg" id="prop-skin-err"></div>
-              <div class="success-msg" id="prop-skin-msg"></div>
-            </div>
-            <!-- pMaskID -->
-            <div class="set-card">
-              <div class="set-title">🎭 Set Mask ID (max 4 digit)</div>
-              <div class="form-group"><label>Username</label><input type="text" id="prop-mask-user" placeholder="Username..."/></div>
-              <div class="form-group"><label>Mask ID (max 9999)</label><input type="number" id="prop-mask-val" placeholder="0" max="9999"/></div>
-              <button class="btn btn-primary" onclick="setProp('pMaskID','prop-mask-user','prop-mask-val','prop-mask-msg','prop-mask-err')">SET MASK</button>
-              <div class="error-msg" id="prop-mask-err"></div>
-              <div class="success-msg" id="prop-mask-msg"></div>
-            </div>
-            <!-- pCS -->
-            <div class="set-card">
-              <div class="set-title">✨ Set CS (Custom Skin)</div>
-              <div class="form-group"><label>Username</label><input type="text" id="prop-cs-user" placeholder="Username..."/></div>
-              <div class="form-group"><label>Status CS</label>
-                <select id="prop-cs-val">
-                  <option value="1">Aktifkan CS</option>
-                  <option value="0">Non-aktifkan CS</option>
+        <!-- ═══ TAB: UANG ═══ -->
+        <div id="set-tab-uang">
+          <div class="card">
+            <div class="card-title">💰 Set Uang Pemain</div>
+            <div class="input-row">
+              <div class="form-group"><label>Username</label><input type="text" id="money-user" placeholder="Username..."/></div>
+              <div class="form-group"><label>Value</label><input type="number" id="money-val" placeholder="0" min="0" max="500000000"/></div>
+              <div class="form-group"><label>Type</label>
+                <select id="money-type" onchange="updateMoneyMax()">
+                  <option value="pCash"       data-max="500000000">pCash — Uang Cash (max 500jt)</option>
+                  <option value="pBank"       data-max="500000000">pBank — Uang Bank (max 500jt)</option>
+                  <option value="pUangMerah"  data-max="500000000">pUangMerah — Uang Merah (max 500jt)</option>
+                  <option value="pRouble"     data-max="1000">pRouble — Donate Coin (max 1.000)</option>
                 </select>
               </div>
-              <button class="btn btn-primary" onclick="setProp('pCS','prop-cs-user','prop-cs-val','prop-cs-msg','prop-cs-err')">SET CS</button>
-              <div class="error-msg" id="prop-cs-err"></div>
-              <div class="success-msg" id="prop-cs-msg"></div>
+              <button class="btn btn-primary btn-sm" onclick="setMoney()" style="flex-shrink:0;margin-bottom:0">SET</button>
             </div>
-            <!-- pFreeRoulet -->
-            <div class="set-card">
-              <div class="set-title">🎰 Set Gacha (Free Roulet)</div>
-              <div class="form-group"><label>Username</label><input type="text" id="prop-gacha-user" placeholder="Username..."/></div>
-              <div class="form-group"><label>Jumlah Gacha (max 300)</label><input type="number" id="prop-gacha-val" placeholder="0" max="300"/></div>
-              <button class="btn btn-primary" onclick="setProp('pFreeRoulet','prop-gacha-user','prop-gacha-val','prop-gacha-msg','prop-gacha-err')">SET GACHA</button>
-              <div class="error-msg" id="prop-gacha-err"></div>
-              <div class="success-msg" id="prop-gacha-msg"></div>
+            <div id="money-limit-info" style="font-size:12px;color:var(--textmuted);margin-bottom:4px">Limit: <strong style="color:var(--accent)">500.000.000</strong></div>
+            <div class="error-msg" id="money-err"></div>
+            <div class="success-msg" id="money-ok"></div>
+          </div>
+        </div>
+
+        <!-- ═══ TAB: ITEM ═══ -->
+        <div id="set-tab-item" style="display:none">
+          <div class="card">
+            <div class="card-title">🎒 Set Item Pemain</div>
+            <div class="input-row">
+              <div class="form-group"><label>Username</label><input type="text" id="item-user" placeholder="Username..."/></div>
+              <div class="form-group"><label>Value (max 1.000)</label><input type="number" id="item-val" placeholder="0" min="0" max="1000"/></div>
+              <div class="form-group"><label>Type</label>
+                <select id="item-type">
+                  <option value="pBatu">pBatu — Batu Bersih</option>
+                  <option value="pBatuk">pBatuk — Batu Kotor</option>
+                  <option value="pFish">pFish — Ikan</option>
+                  <option value="pPenyu">pPenyu — Penyu</option>
+                  <option value="pDolphin">pDolphin — Dolpin</option>
+                  <option value="pHiu">pHiu — Hiu</option>
+                  <option value="pMegalodon">pMegalodon — Megalodon</option>
+                  <option value="pCaught">pCaught — Umpan Mancing</option>
+                  <option value="pPadi">pPadi — Padi</option>
+                  <option value="pAyam">pAyam — Ayam</option>
+                  <option value="pSemen">pSemen — Semen</option>
+                  <option value="pEmas">pEmas — Emas</option>
+                  <option value="pSusu">pSusu — Susu Sapi</option>
+                  <option value="pMinyak">pMinyak — Minyak</option>
+                  <option value="pAyamKemas">pAyamKemas — Ayam Kemas</option>
+                  <option value="pAyamPotong">pAyamPotong — Ayam Potong</option>
+                  <option value="pAyamHidup">pAyamHidup — Ayam Hidup</option>
+                  <option value="pBulu">pBulu — Bulu Ayam</option>
+                </select>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="setItem()" style="flex-shrink:0;margin-bottom:0">SET</button>
+            </div>
+            <div style="font-size:12px;color:var(--textmuted);margin-bottom:4px">Limit semua item: <strong style="color:var(--accent)">1.000</strong></div>
+            <div class="error-msg" id="item-err"></div>
+            <div class="success-msg" id="item-ok"></div>
+          </div>
+        </div>
+
+        <!-- ═══ TAB: AKUN ═══ -->
+        <div id="set-tab-akun" style="display:none">
+          <div class="card">
+            <div class="card-title">🗃️ Set Akun Pemain</div>
+            <div class="input-row">
+              <div class="form-group"><label>Username</label><input type="text" id="acc-user" placeholder="Username..."/></div>
+              <div class="form-group"><label>Value</label><input type="number" id="acc-val" placeholder="0" min="0" max="5000"/></div>
+              <div class="form-group"><label>Type</label>
+                <select id="acc-type" onchange="updateAccMax()">
+                  <option value="pDrugs"     data-max="500" >pDrugs — Drugs (max 500)</option>
+                  <option value="pMicin"     data-max="500" >pMicin — Marijuana (max 500)</option>
+                  <option value="pSteroid"   data-max="500" >pSteroid — Steroid (max 500)</option>
+                  <option value="pComponent" data-max="5000">pComponent — Component (max 5.000)</option>
+                  <option value="pMetall"    data-max="5000">pMetall — Besi (max 5.000)</option>
+                  <option value="pFood"      data-max="200" >pFood — Makanan (max 200)</option>
+                  <option value="pDrink"     data-max="200" >pDrink — Minuman (max 200)</option>
+                </select>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="setAccount()" style="flex-shrink:0;margin-bottom:0">SET</button>
+            </div>
+            <div id="acc-limit-info" style="font-size:12px;color:var(--textmuted);margin-bottom:4px">Limit: <strong style="color:var(--accent)" id="acc-limit-val">500</strong></div>
+            <div class="error-msg" id="acc-err"></div>
+            <div class="success-msg" id="acc-ok"></div>
+          </div>
+        </div>
+
+        <!-- ═══ TAB: PROPERTI ═══ -->
+        <div id="set-tab-properti" style="display:none">
+          <div class="card">
+            <div class="card-title">🔧 Set Properti Pemain</div>
+            <div class="prop-grid" id="prop-grid">
+              <div class="set-card">
+                <div class="set-title">🎭 Set Skin</div>
+                <div class="form-group"><label>Username</label><input type="text" id="prop-skin-user" placeholder="Username..."/></div>
+                <div class="form-group"><label>Skin ID</label><input type="number" id="prop-skin-val" placeholder="0"/></div>
+                <button class="btn btn-primary" onclick="setProp('pSkin','prop-skin-user','prop-skin-val','prop-skin-msg','prop-skin-err')">SET SKIN</button>
+                <div class="error-msg" id="prop-skin-err"></div>
+                <div class="success-msg" id="prop-skin-msg"></div>
+              </div>
+              <div class="set-card">
+                <div class="set-title">🎭 Set Mask ID (max 4 digit)</div>
+                <div class="form-group"><label>Username</label><input type="text" id="prop-mask-user" placeholder="Username..."/></div>
+                <div class="form-group"><label>Mask ID (max 9999)</label><input type="number" id="prop-mask-val" placeholder="0" max="9999"/></div>
+                <button class="btn btn-primary" onclick="setProp('pMaskID','prop-mask-user','prop-mask-val','prop-mask-msg','prop-mask-err')">SET MASK</button>
+                <div class="error-msg" id="prop-mask-err"></div>
+                <div class="success-msg" id="prop-mask-msg"></div>
+              </div>
+              <div class="set-card">
+                <div class="set-title">✨ Set CS (Custom Skin)</div>
+                <div class="form-group"><label>Username</label><input type="text" id="prop-cs-user" placeholder="Username..."/></div>
+                <div class="form-group"><label>Status CS</label>
+                  <select id="prop-cs-val">
+                    <option value="1">Aktifkan CS</option>
+                    <option value="0">Non-aktifkan CS</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary" onclick="setProp('pCS','prop-cs-user','prop-cs-val','prop-cs-msg','prop-cs-err')">SET CS</button>
+                <div class="error-msg" id="prop-cs-err"></div>
+                <div class="success-msg" id="prop-cs-msg"></div>
+              </div>
+              <div class="set-card">
+                <div class="set-title">🎰 Set Gacha (Free Roulet)</div>
+                <div class="form-group"><label>Username</label><input type="text" id="prop-gacha-user" placeholder="Username..."/></div>
+                <div class="form-group"><label>Jumlah Gacha (max 300)</label><input type="number" id="prop-gacha-val" placeholder="0" max="300"/></div>
+                <button class="btn btn-primary" onclick="setProp('pFreeRoulet','prop-gacha-user','prop-gacha-val','prop-gacha-msg','prop-gacha-err')">SET GACHA</button>
+                <div class="error-msg" id="prop-gacha-err"></div>
+                <div class="success-msg" id="prop-gacha-msg"></div>
+              </div>
             </div>
           </div>
         </div>
-        
-        <!-- Set VIP -->
-        <div class="card">
-          <div class="card-title">&#11088; Set VIP Pemain</div>
 
-          <!-- Current VIP info panel -->
-          <div id="vip-info-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
-            <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:10px;font-weight:600">Info VIP Saat Ini</div>
-            <div style="display:flex;flex-wrap:wrap;gap:12px" id="vip-info-content"></div>
-          </div>
-
-          <div class="input-row">
-            <div class="form-group">
-              <label>Username</label>
-              <input type="text" id="vip-user" placeholder="Username..." oninput="clearVipInfo()"/>
+        <!-- ═══ TAB: VIP ═══ -->
+        <div id="set-tab-vip" style="display:none">
+          <div class="card">
+            <div class="card-title">⭐ Set VIP Pemain</div>
+            <div id="vip-info-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+              <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:10px;font-weight:600">Info VIP Saat Ini</div>
+              <div style="display:flex;flex-wrap:wrap;gap:12px" id="vip-info-content"></div>
             </div>
-            <div class="form-group">
-              <label>Tipe VIP</label>
-              <select id="vip-type" onchange="onVipTypeChange()">
-                <option value="0">0 — Nonaktifkan VIP</option>
-                <option value="1">1 — VIP Low</option>
-                <option value="2">2 — VIP Medium</option>
-                <option value="3">3 — VIP High</option>
-              </select>
+            <div class="input-row">
+              <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="vip-user" placeholder="Username..." oninput="clearVipInfo()"/>
+              </div>
+              <div class="form-group">
+                <label>Tipe VIP</label>
+                <select id="vip-type" onchange="onVipTypeChange()">
+                  <option value="0">0 — Nonaktifkan VIP</option>
+                  <option value="1">1 — VIP Low</option>
+                  <option value="2">2 — VIP Medium</option>
+                  <option value="3">3 — VIP High</option>
+                </select>
+              </div>
+              <div class="form-group" id="vip-days-wrap">
+                <label>Durasi (hari)</label>
+                <input type="number" id="vip-days" placeholder="30" min="1" max="3650"/>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="setVip()" style="flex-shrink:0;margin-bottom:0">SET</button>
             </div>
-            <div class="form-group" id="vip-days-wrap">
-              <label>Durasi (hari)</label>
-              <input type="number" id="vip-days" placeholder="30" min="1" max="3650"/>
+            <div id="vip-presets" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+              <span style="font-size:11px;color:var(--textmuted);align-self:center;letter-spacing:1px;text-transform:uppercase;font-weight:600">Quick:</span>
+              <button class="btn btn-copy btn-sm" onclick="setVipDays(7)">7 Hari</button>
+              <button class="btn btn-copy btn-sm" onclick="setVipDays(30)">30 Hari</button>
+              <button class="btn btn-copy btn-sm" onclick="setVipDays(90)">90 Hari</button>
+              <button class="btn btn-copy btn-sm" onclick="setVipDays(180)">180 Hari</button>
+              <button class="btn btn-copy btn-sm" onclick="setVipDays(365)">1 Tahun</button>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="setVip()" style="flex-shrink:0;margin-bottom:0">SET</button>
+            <div style="display:flex;gap:8px;margin-bottom:4px">
+              <button class="btn btn-copy btn-sm" onclick="checkVipStatus()">🔍 Cek Status VIP</button>
+            </div>
+            <div class="error-msg" id="vip-err"></div>
+            <div class="success-msg" id="vip-ok"></div>
           </div>
-
-          <!-- Quick presets -->
-          <div id="vip-presets" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-            <span style="font-size:11px;color:var(--textmuted);align-self:center;letter-spacing:1px;text-transform:uppercase;font-weight:600">Quick:</span>
-            <button class="btn btn-copy btn-sm" onclick="setVipDays(7)">7 Hari</button>
-            <button class="btn btn-copy btn-sm" onclick="setVipDays(30)">30 Hari</button>
-            <button class="btn btn-copy btn-sm" onclick="setVipDays(90)">90 Hari</button>
-            <button class="btn btn-copy btn-sm" onclick="setVipDays(180)">180 Hari</button>
-            <button class="btn btn-copy btn-sm" onclick="setVipDays(365)">1 Tahun</button>
-          </div>
-
-          <div style="display:flex;gap:8px;margin-bottom:4px">
-            <button class="btn btn-copy btn-sm" onclick="checkVipStatus()">&#128270; Cek Status VIP</button>
-          </div>
-
-          <div class="error-msg" id="vip-err"></div>
-          <div class="success-msg" id="vip-ok"></div>
         </div>
 
-        <!-- Set Gun -->
-        <div class="card">
-          <div class="card-title">&#128299; Set Senjata Pemain</div>
-          <div class="gun-preview-wrap" id="gun-preview-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px">
-            <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:600">Preview Slot Senjata</div>
-            <div id="gun-slot-preview" style="display:flex;flex-wrap:wrap;gap:6px"></div>
-          </div>
-          <div class="input-row">
-            <div class="form-group">
-              <label>Username</label>
-              <input type="text" id="gun-user" placeholder="Username..." oninput="clearGunPreview()"/>
+        <!-- ═══ TAB: SENJATA ═══ -->
+        <div id="set-tab-senjata" style="display:none">
+          <div class="card">
+            <div class="card-title">🔫 Set Senjata Pemain</div>
+            <div class="gun-preview-wrap" id="gun-preview-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px">
+              <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:600">Preview Slot Senjata</div>
+              <div id="gun-slot-preview" style="display:flex;flex-wrap:wrap;gap:6px"></div>
             </div>
-            <div class="form-group">
-              <label>ID Senjata (23-31)</label>
-              <select id="gun-id" onchange="updateGunLabel()">
-                <option value="23">23 — Silenced Pistol</option>
-                <option value="24">24 — Desert Eagle</option>
-                <option value="25">25 — Shotgun</option>
-                <option value="26">26 — Sawnoff Shotgun</option>
-                <option value="27">27 — Combat Shotgun</option>
-                <option value="28">28 — Micro SMG / Uzi</option>
-                <option value="29">29 — MP5</option>
-                <option value="30">30 — AK-47</option>
-                <option value="31">31 — M4</option>
-              </select>
+            <div class="input-row">
+              <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="gun-user" placeholder="Username..." oninput="clearGunPreview()"/>
+              </div>
+              <div class="form-group">
+                <label>ID Senjata (23-31)</label>
+                <select id="gun-id" onchange="updateGunLabel()">
+                  <option value="23">23 — Silenced Pistol</option>
+                  <option value="24">24 — Desert Eagle</option>
+                  <option value="25">25 — Shotgun</option>
+                  <option value="26">26 — Sawnoff Shotgun</option>
+                  <option value="27">27 — Combat Shotgun</option>
+                  <option value="28">28 — Micro SMG / Uzi</option>
+                  <option value="29">29 — MP5</option>
+                  <option value="30">30 — AK-47</option>
+                  <option value="31">31 — M4</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Ammo (max 1000)</label>
+                <input type="number" id="gun-ammo" placeholder="0" min="0" max="1000"/>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="setGun()" style="flex-shrink:0;margin-bottom:0">SET</button>
             </div>
-            <div class="form-group">
-              <label>Ammo (max 1000)</label>
-              <input type="number" id="gun-ammo" placeholder="0" min="0" max="1000"/>
+            <div style="display:flex;gap:8px;margin-top:4px;margin-bottom:4px">
+              <button class="btn btn-copy btn-sm" onclick="previewGunSlots()">🔍 Lihat Slot</button>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="setGun()" style="flex-shrink:0;margin-bottom:0">SET</button>
+            <div class="error-msg" id="gun-err"></div>
+            <div class="success-msg" id="gun-ok"></div>
           </div>
-          <div style="display:flex;gap:8px;margin-top:4px;margin-bottom:4px">
-            <button class="btn btn-copy btn-sm" onclick="previewGunSlots()">&#128270; Lihat Slot</button>
-          </div>
-          <div class="error-msg" id="gun-err"></div>
-          <div class="success-msg" id="gun-ok"></div>
         </div>
 
-        <!-- Set Vehicle -->
-        <div class="card">
-          <div class="card-title">&#128663; Set Kendaraan Pemain</div>
-          <div id="veh-preview-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px">
-            <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:600">Preview Slot Kendaraan</div>
-            <div id="veh-slot-preview" style="display:flex;flex-wrap:wrap;gap:6px"></div>
-          </div>
-          <div class="input-row">
-            <div class="form-group">
-              <label>Username</label>
-              <input type="text" id="veh-user" placeholder="Username..." oninput="clearVehPreview()"/>
+        <!-- ═══ TAB: KENDARAAN ═══ -->
+        <div id="set-tab-kendaraan" style="display:none">
+          <div class="card">
+            <div class="card-title">🚗 Set Kendaraan Pemain</div>
+            <div id="veh-preview-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px">
+              <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--textmuted);margin-bottom:8px;font-weight:600">Preview Slot Kendaraan</div>
+              <div id="veh-slot-preview" style="display:flex;flex-wrap:wrap;gap:6px"></div>
             </div>
-            <div class="form-group" style="flex:2">
-              <label>Kendaraan</label>
-              <select id="veh-id" style="width:100%">
-                <option value="400">400 — Landstalker</option>
-                <option value="401">401 — Bravura</option>
-                <option value="402">402 — Buffalo</option>
-                <option value="403">403 — Linerunner</option>
-                <option value="404">404 — Pereniel</option>
-                <option value="405">405 — Sentinel</option>
-                <option value="406">406 — Dumper</option>
-                <option value="407">407 — Firetruck</option>
-                <option value="408">408 — Trashmaster</option>
-                <option value="409">409 — Stretch</option>
-                <option value="410">410 — Manana</option>
-                <option value="411">411 — Infernus</option>
-                <option value="412">412 — Voodoo</option>
-                <option value="413">413 — Pony</option>
-                <option value="414">414 — Mule</option>
-                <option value="415">415 — Cheetah</option>
-                <option value="416">416 — Ambulance</option>
-                <option value="417">417 — Leviathan</option>
-                <option value="418">418 — Moonbeam</option>
-                <option value="419">419 — Esperanto</option>
-                <option value="420">420 — Taxi</option>
-                <option value="421">421 — Washington</option>
-                <option value="422">422 — Bobcat</option>
-                <option value="423">423 — Mr Whoopee</option>
-                <option value="424">424 — BF Injection</option>
-                <option value="425">425 — Hunter</option>
-                <option value="426">426 — Premier</option>
-                <option value="427">427 — Enforcer</option>
-                <option value="428">428 — Securicar</option>
-                <option value="429">429 — Banshee</option>
-                <option value="430">430 — Predator</option>
-                <option value="431">431 — Bus</option>
-                <option value="432">432 — Rhino</option>
-                <option value="433">433 — Barracks</option>
-                <option value="434">434 — Hotknife</option>
-                <option value="436">436 — Previon</option>
-                <option value="437">437 — Coach</option>
-                <option value="438">438 — Cabbie</option>
-                <option value="439">439 — Stallion</option>
-                <option value="440">440 — Rumpo</option>
-                <option value="442">442 — Romero</option>
-                <option value="443">443 — Packer</option>
-                <option value="444">444 — Monster</option>
-                <option value="445">445 — Admiral</option>
-                <option value="446">446 — Squalo</option>
-                <option value="447">447 — Seasparrow</option>
-                <option value="448">448 — Pizzaboy</option>
-                <option value="451">451 — Turismo</option>
-                <option value="452">452 — Speeder</option>
-                <option value="453">453 — Reefer</option>
-                <option value="454">454 — Tropic</option>
-                <option value="455">455 — Flatbed</option>
-                <option value="456">456 — Yankee</option>
-                <option value="457">457 — Caddy</option>
-                <option value="458">458 — Solair</option>
-                <option value="460">460 — Skimmer</option>
-                <option value="461">461 — PCJ-600</option>
-                <option value="462">462 — Faggio</option>
-                <option value="463">463 — Freeway</option>
-                <option value="466">466 — Glendale</option>
-                <option value="467">467 — Oceanic</option>
-                <option value="468">468 — Sanchez</option>
-                <option value="469">469 — Sparrow</option>
-                <option value="470">470 — Patriot</option>
-                <option value="471">471 — Quad</option>
-                <option value="474">474 — Hermes</option>
-                <option value="475">475 — Sabre</option>
-                <option value="476">476 — Rustler</option>
-                <option value="477">477 — ZR-350</option>
-                <option value="478">478 — Walton</option>
-                <option value="479">479 — Regina</option>
-                <option value="480">480 — Comet</option>
-                <option value="481">481 — BMX</option>
-                <option value="482">482 — Burrito</option>
-                <option value="483">483 — Camper</option>
-                <option value="484">484 — Marquis</option>
-                <option value="487">487 — Maverick</option>
-                <option value="489">489 — Rancher</option>
-                <option value="490">490 — FBI Rancher</option>
-                <option value="491">491 — Virgo</option>
-                <option value="492">492 — Greenwood</option>
-                <option value="493">493 — Jetmax</option>
-                <option value="494">494 — Hotring</option>
-                <option value="495">495 — Sandking</option>
-                <option value="496">496 — Blista Compact</option>
-                <option value="498">498 — Boxville</option>
-                <option value="499">499 — Benson</option>
-                <option value="500">500 — Mesa</option>
-                <option value="502">502 — Hotring Racer A</option>
-                <option value="503">503 — Hotring Racer B</option>
-                <option value="506">506 — Super GT</option>
-                <option value="507">507 — Elegant</option>
-                <option value="508">508 — Journey</option>
-                <option value="510">510 — Mountain Bike</option>
-                <option value="511">511 — Beagle</option>
-                <option value="512">512 — Cropduster</option>
-                <option value="513">513 — Stuntplane</option>
-                <option value="516">516 — Nebula</option>
-                <option value="517">517 — Majestic</option>
-                <option value="518">518 — Buccaneer</option>
-                <option value="519">519 — Shamal</option>
-                <option value="520">520 — Hydra</option>
-                <option value="521">521 — FCR-900</option>
-                <option value="522">522 — NRG-500</option>
-                <option value="523">523 — HPV1000</option>
-                <option value="526">526 — Fortune</option>
-                <option value="527">527 — Cadrona</option>
-                <option value="529">529 — Willard</option>
-                <option value="533">533 — Feltzer</option>
-                <option value="534">534 — Remington</option>
-                <option value="535">535 — Slamvan</option>
-                <option value="536">536 — Blade</option>
-                <option value="540">540 — Vincent</option>
-                <option value="541">541 — Bullet</option>
-                <option value="542">542 — Clover</option>
-                <option value="543">543 — Sadler</option>
-                <option value="545">545 — Hustler</option>
-                <option value="546">546 — Intruder</option>
-                <option value="547">547 — Primo</option>
-                <option value="549">549 — Tampa</option>
-                <option value="550">550 — Sunrise</option>
-                <option value="551">551 — Merit</option>
-                <option value="555">555 — Windsor</option>
-                <option value="558">558 — Uranus</option>
-                <option value="559">559 — Jester</option>
-                <option value="560">560 — Sultan</option>
-                <option value="561">561 — Stratum</option>
-                <option value="562">562 — Elegy</option>
-                <option value="565">565 — Flash</option>
-                <option value="566">566 — Tahoma</option>
-                <option value="567">567 — Savanna</option>
-                <option value="568">568 — Bandito</option>
-                <option value="571">571 — Kart</option>
-                <option value="575">575 — Broadway</option>
-                <option value="576">576 — Tornado</option>
-                <option value="579">579 — Huntley</option>
-                <option value="580">580 — Stafford</option>
-                <option value="581">581 — BF-400</option>
-                <option value="585">585 — Emperor</option>
-                <option value="586">586 — Wayfarer</option>
-                <option value="587">587 — Euros</option>
-                <option value="589">589 — Club</option>
-                <option value="596">596 — Police Car LSPD</option>
-                <option value="597">597 — Police Car SFPD</option>
-                <option value="598">598 — Police Car LVPD</option>
-                <option value="599">599 — Police Ranger</option>
-                <option value="600">600 — Picador</option>
-                <option value="601">601 — S.W.A.T.</option>
-                <option value="602">602 — Alpha</option>
-                <option value="603">603 — Phoenix</option>
-              </select>
+            <div class="input-row">
+              <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="veh-user" placeholder="Username..." oninput="clearVehPreview()"/>
+              </div>
+              <div class="form-group" style="flex:2">
+                <label>Kendaraan</label>
+                <select id="veh-id" style="width:100%">
+                  <option value="400">400 — Landstalker</option>
+                  <option value="401">401 — Bravura</option>
+                  <option value="402">402 — Buffalo</option>
+                  <option value="403">403 — Linerunner</option>
+                  <option value="404">404 — Pereniel</option>
+                  <option value="405">405 — Sentinel</option>
+                  <option value="406">406 — Dumper</option>
+                  <option value="407">407 — Firetruck</option>
+                  <option value="408">408 — Trashmaster</option>
+                  <option value="409">409 — Stretch</option>
+                  <option value="410">410 — Manana</option>
+                  <option value="411">411 — Infernus</option>
+                  <option value="412">412 — Voodoo</option>
+                  <option value="413">413 — Pony</option>
+                  <option value="414">414 — Mule</option>
+                  <option value="415">415 — Cheetah</option>
+                  <option value="416">416 — Ambulance</option>
+                  <option value="417">417 — Leviathan</option>
+                  <option value="418">418 — Moonbeam</option>
+                  <option value="419">419 — Esperanto</option>
+                  <option value="420">420 — Taxi</option>
+                  <option value="421">421 — Washington</option>
+                  <option value="422">422 — Bobcat</option>
+                  <option value="423">423 — Mr Whoopee</option>
+                  <option value="424">424 — BF Injection</option>
+                  <option value="425">425 — Hunter</option>
+                  <option value="426">426 — Premier</option>
+                  <option value="427">427 — Enforcer</option>
+                  <option value="428">428 — Securicar</option>
+                  <option value="429">429 — Banshee</option>
+                  <option value="430">430 — Predator</option>
+                  <option value="431">431 — Bus</option>
+                  <option value="432">432 — Rhino</option>
+                  <option value="433">433 — Barracks</option>
+                  <option value="434">434 — Hotknife</option>
+                  <option value="436">436 — Previon</option>
+                  <option value="437">437 — Coach</option>
+                  <option value="438">438 — Cabbie</option>
+                  <option value="439">439 — Stallion</option>
+                  <option value="440">440 — Rumpo</option>
+                  <option value="442">442 — Romero</option>
+                  <option value="443">443 — Packer</option>
+                  <option value="444">444 — Monster</option>
+                  <option value="445">445 — Admiral</option>
+                  <option value="446">446 — Squalo</option>
+                  <option value="447">447 — Seasparrow</option>
+                  <option value="448">448 — Pizzaboy</option>
+                  <option value="451">451 — Turismo</option>
+                  <option value="452">452 — Speeder</option>
+                  <option value="453">453 — Reefer</option>
+                  <option value="454">454 — Tropic</option>
+                  <option value="455">455 — Flatbed</option>
+                  <option value="456">456 — Yankee</option>
+                  <option value="457">457 — Caddy</option>
+                  <option value="458">458 — Solair</option>
+                  <option value="460">460 — Skimmer</option>
+                  <option value="461">461 — PCJ-600</option>
+                  <option value="462">462 — Faggio</option>
+                  <option value="463">463 — Freeway</option>
+                  <option value="466">466 — Glendale</option>
+                  <option value="467">467 — Oceanic</option>
+                  <option value="468">468 — Sanchez</option>
+                  <option value="469">469 — Sparrow</option>
+                  <option value="470">470 — Patriot</option>
+                  <option value="471">471 — Quad</option>
+                  <option value="474">474 — Hermes</option>
+                  <option value="475">475 — Sabre</option>
+                  <option value="476">476 — Rustler</option>
+                  <option value="477">477 — ZR-350</option>
+                  <option value="478">478 — Walton</option>
+                  <option value="479">479 — Regina</option>
+                  <option value="480">480 — Comet</option>
+                  <option value="481">481 — BMX</option>
+                  <option value="482">482 — Burrito</option>
+                  <option value="483">483 — Camper</option>
+                  <option value="484">484 — Marquis</option>
+                  <option value="487">487 — Maverick</option>
+                  <option value="489">489 — Rancher</option>
+                  <option value="490">490 — FBI Rancher</option>
+                  <option value="491">491 — Virgo</option>
+                  <option value="492">492 — Greenwood</option>
+                  <option value="493">493 — Jetmax</option>
+                  <option value="494">494 — Hotring</option>
+                  <option value="495">495 — Sandking</option>
+                  <option value="496">496 — Blista Compact</option>
+                  <option value="498">498 — Boxville</option>
+                  <option value="499">499 — Benson</option>
+                  <option value="500">500 — Mesa</option>
+                  <option value="502">502 — Hotring Racer A</option>
+                  <option value="503">503 — Hotring Racer B</option>
+                  <option value="506">506 — Super GT</option>
+                  <option value="507">507 — Elegant</option>
+                  <option value="508">508 — Journey</option>
+                  <option value="510">510 — Mountain Bike</option>
+                  <option value="511">511 — Beagle</option>
+                  <option value="512">512 — Cropduster</option>
+                  <option value="513">513 — Stuntplane</option>
+                  <option value="516">516 — Nebula</option>
+                  <option value="517">517 — Majestic</option>
+                  <option value="518">518 — Buccaneer</option>
+                  <option value="519">519 — Shamal</option>
+                  <option value="520">520 — Hydra</option>
+                  <option value="521">521 — FCR-900</option>
+                  <option value="522">522 — NRG-500</option>
+                  <option value="523">523 — HPV1000</option>
+                  <option value="526">526 — Fortune</option>
+                  <option value="527">527 — Cadrona</option>
+                  <option value="529">529 — Willard</option>
+                  <option value="533">533 — Feltzer</option>
+                  <option value="534">534 — Remington</option>
+                  <option value="535">535 — Slamvan</option>
+                  <option value="536">536 — Blade</option>
+                  <option value="540">540 — Vincent</option>
+                  <option value="541">541 — Bullet</option>
+                  <option value="542">542 — Clover</option>
+                  <option value="543">543 — Sadler</option>
+                  <option value="545">545 — Hustler</option>
+                  <option value="546">546 — Intruder</option>
+                  <option value="547">547 — Primo</option>
+                  <option value="549">549 — Tampa</option>
+                  <option value="550">550 — Sunrise</option>
+                  <option value="551">551 — Merit</option>
+                  <option value="555">555 — Windsor</option>
+                  <option value="558">558 — Uranus</option>
+                  <option value="559">559 — Jester</option>
+                  <option value="560">560 — Sultan</option>
+                  <option value="561">561 — Stratum</option>
+                  <option value="562">562 — Elegy</option>
+                  <option value="565">565 — Flash</option>
+                  <option value="566">566 — Tahoma</option>
+                  <option value="567">567 — Savanna</option>
+                  <option value="568">568 — Bandito</option>
+                  <option value="571">571 — Kart</option>
+                  <option value="575">575 — Broadway</option>
+                  <option value="576">576 — Tornado</option>
+                  <option value="579">579 — Huntley</option>
+                  <option value="580">580 — Stafford</option>
+                  <option value="581">581 — BF-400</option>
+                  <option value="585">585 — Emperor</option>
+                  <option value="586">586 — Wayfarer</option>
+                  <option value="587">587 — Euros</option>
+                  <option value="589">589 — Club</option>
+                  <option value="596">596 — Police Car LSPD</option>
+                  <option value="597">597 — Police Car SFPD</option>
+                  <option value="598">598 — Police Car LVPD</option>
+                  <option value="599">599 — Police Ranger</option>
+                  <option value="600">600 — Picador</option>
+                  <option value="601">601 — S.W.A.T.</option>
+                  <option value="602">602 — Alpha</option>
+                  <option value="603">603 — Phoenix</option>
+                </select>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="setVeh()" style="flex-shrink:0;margin-bottom:0">SET</button>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="setVeh()" style="flex-shrink:0;margin-bottom:0">SET</button>
+            <div style="display:flex;gap:8px;margin-top:4px;margin-bottom:4px">
+              <button class="btn btn-copy btn-sm" onclick="previewVehSlots()">🔍 Lihat Slot</button>
+            </div>
+            <div class="error-msg" id="veh-err"></div>
+            <div class="success-msg" id="veh-ok"></div>
           </div>
-          <div style="display:flex;gap:8px;margin-top:4px;margin-bottom:4px">
-            <button class="btn btn-copy btn-sm" onclick="previewVehSlots()">&#128270; Lihat Slot</button>
-          </div>
-          <div class="error-msg" id="veh-err"></div>
-          <div class="success-msg" id="veh-ok"></div>
         </div>
+
       </div>
       <div class="page" id="page-adminlog">
         <div class="page-title">📋 Admin Log</div>
@@ -4809,6 +4824,20 @@ async function addATM() {
 }
 
 // ─── Punishment ───────────────────────────────────────────────────────────────
+
+function switchSetTab(tab) {
+  var tabs = ['uang','item','akun','properti','vip','senjata','kendaraan'];
+  tabs.forEach(function(t) {
+    var el  = document.getElementById('set-tab-'+t);
+    var btn = document.getElementById('set-tab-'+t+'-btn');
+    if (el)  el.style.display = 'none';
+    if (btn) btn.className = 'btn btn-copy btn-sm';
+  });
+  var active    = document.getElementById('set-tab-'+tab);
+  var activeBtn = document.getElementById('set-tab-'+tab+'-btn');
+  if (active)    active.style.display = 'block';
+  if (activeBtn) activeBtn.className  = 'btn btn-primary btn-sm';
+}
 
 function switchPunTab(tab) {
   var jailEl   = document.getElementById('pun-tab-jail');
