@@ -1960,14 +1960,82 @@ func handleGetPropertyStats(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, 500, map[string]string{"error": "database not connected"})
 		return
 	}
-	var totalBizz, ownedBizz, totalHouse, ownedHouse int
+	var totalBizz, ownedBizz, totalHouse, ownedHouse, totalWorkshop, ownedWorkshop int
 	db.QueryRow("SELECT COUNT(*), SUM(CASE WHEN bOwned=1 THEN 1 ELSE 0 END) FROM bizz").Scan(&totalBizz, &ownedBizz)
 	db.QueryRow("SELECT COUNT(*), SUM(CASE WHEN hOwned=1 THEN 1 ELSE 0 END) FROM house").Scan(&totalHouse, &ownedHouse)
+	db.QueryRow("SELECT COUNT(*), SUM(CASE WHEN owner != '-' AND owner != '' THEN 1 ELSE 0 END) FROM workshop").Scan(&totalWorkshop, &ownedWorkshop)
 	jsonResp(w, 200, map[string]any{
-		"total_bizz":  totalBizz,
-		"owned_bizz":  ownedBizz,
-		"total_house": totalHouse,
-		"owned_house": ownedHouse,
+		"total_bizz":      totalBizz,
+		"owned_bizz":      ownedBizz,
+		"total_house":     totalHouse,
+		"owned_house":     ownedHouse,
+		"total_workshop":  totalWorkshop,
+		"owned_workshop":  ownedWorkshop,
+	})
+}
+
+func handleAddWorkshop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Name      string  `json:"name"`
+		PosX      float64 `json:"posx"`
+		PosY      float64 `json:"posy"`
+		PosZ      float64 `json:"posz"`
+		Component int     `json:"component"`
+		Price     int64   `json:"price"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		jsonResp(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		jsonResp(w, 400, map[string]string{"error": "nama workshop wajib diisi"})
+		return
+	}
+	if len(req.Name) > 26 {
+		jsonResp(w, 400, map[string]string{"error": "nama workshop maksimal 26 karakter"})
+		return
+	}
+	if req.Component < 0 || req.Component > 1000 {
+		jsonResp(w, 400, map[string]string{"error": "component harus antara 0 dan 1000"})
+		return
+	}
+	if req.Price < 30_000_000 || req.Price > 150_000_000 {
+		jsonResp(w, 400, map[string]string{"error": "harga harus antara 30 juta dan 150 juta"})
+		return
+	}
+	if db == nil {
+		jsonResp(w, 500, map[string]string{"error": "database not connected"})
+		return
+	}
+
+	// Auto-increment id
+	var maxID int
+	db.QueryRow("SELECT COALESCE(MAX(id),0) FROM workshop").Scan(&maxID)
+	newID := maxID + 1
+
+	// INSERT sesuai schema — default values untuk kolom lainnya
+	_, err := db.Exec(
+		`INSERT INTO workshop
+		 (id, owner, posx, posy, posz, component, money, material, name, status, price, employe0, employe1, employe2)
+		 VALUES (?, '-', ?, ?, ?, ?, 0, 0, ?, 0, ?, '-', '-', '-')`,
+		newID, req.PosX, req.PosY, req.PosZ, req.Component, req.Name, req.Price,
+	)
+	if err != nil {
+		jsonResp(w, 500, map[string]string{"error": "gagal insert: " + err.Error()})
+		return
+	}
+
+	s, _ := getSession(r)
+	logAction(s.Username, fmt.Sprintf("Add workshop id=%d '%s' component=%d harga=%d", newID, req.Name, req.Component, req.Price))
+
+	jsonResp(w, 200, map[string]any{
+		"status": "created",
+		"id":     newID,
+		"name":   req.Name,
 	})
 }
 
@@ -3357,12 +3425,18 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
         <div style="font-family:Orbitron,sans-serif;font-size:28px;font-weight:700;color:var(--accent3)" id="stat-house-total">—</div>
         <div style="font-size:11px;color:var(--textmuted);margin-top:4px" id="stat-house-owned">— dimiliki</div>
       </div>
+      <div class="info-card" style="text-align:center">
+        <div class="info-label">Total Workshop</div>
+        <div style="font-family:Orbitron,sans-serif;font-size:28px;font-weight:700;color:var(--yellow)" id="stat-workshop-total">—</div>
+        <div style="font-size:11px;color:var(--textmuted);margin-top:4px" id="stat-workshop-owned">— dimiliki</div>
+      </div>
     </div>
 
     <!-- Tab switcher -->
     <div style="display:flex;gap:8px;margin-bottom:20px">
-      <button class="btn btn-primary btn-sm" id="tab-bizz-btn" onclick="switchPropTab('bizz')">&#127981; Add Bisnis</button>
-      <button class="btn btn-copy btn-sm"    id="tab-house-btn" onclick="switchPropTab('house')">&#127968; Add Rumah</button>
+      <button class="btn btn-primary btn-sm" id="tab-bizz-btn"     onclick="switchPropTab('bizz')">&#127981; Add Bisnis</button>
+      <button class="btn btn-copy btn-sm"    id="tab-house-btn"    onclick="switchPropTab('house')">&#127968; Add Rumah</button>
+      <button class="btn btn-copy btn-sm"    id="tab-workshop-btn" onclick="switchPropTab('workshop')">&#128295; Add Workshop</button>
     </div>
 
     <!-- ═══ ADD BISNIS ═══ -->
@@ -3506,6 +3580,56 @@ tbody tr:hover{background:rgba(168,85,247,0.03)}
         <button class="btn btn-primary" style="max-width:220px" onclick="addHouse()">&#43; ADD RUMAH</button>
         <div class="error-msg"   id="house-err"></div>
         <div class="success-msg" id="house-ok"></div>
+      </div>
+    </div>
+
+    <!-- ═══ ADD WORKSHOP ═══ -->
+    <div id="prop-tab-workshop" style="display:none">
+      <div class="card">
+        <div class="card-title">&#128295; Add Workshop Baru</div>
+
+        <div class="input-row" style="grid-template-columns:1fr 1fr">
+          <div class="form-group">
+            <label>Nama Workshop (max 26 karakter)</label>
+            <input type="text" id="ws-name" placeholder="contoh: Bengkel Jaya..." maxlength="26"/>
+          </div>
+          <div class="form-group">
+            <label>Harga Beli (price) — 30jt s/d 150jt</label>
+            <input type="number" id="ws-price" placeholder="30000000" min="30000000" max="150000000"/>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Component (max 1000)</label>
+          <input type="number" id="ws-component" placeholder="0" min="0" max="1000"/>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--textmuted);margin-bottom:10px;font-weight:700">Koordinat Posisi Workshop</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>X (posx)</label>
+              <input type="number" id="ws-x" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Y (posy)</label>
+              <input type="number" id="ws-y" placeholder="0.0" step="0.001"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Z (posz)</label>
+              <input type="number" id="ws-z" placeholder="0.0" step="0.001"/>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--textmuted);line-height:1.7">
+          &#9432; Field lainnya diset ke default:
+          <span style="color:var(--text2)">owner='-', money=0, material=0, status=0, employe0-2='-'</span>
+        </div>
+
+        <button class="btn btn-primary" style="max-width:220px;background:linear-gradient(135deg,#b45309,var(--yellow))" onclick="addWorkshop()">&#43; ADD WORKSHOP</button>
+        <div class="error-msg"   id="ws-err"></div>
+        <div class="success-msg" id="ws-ok"></div>
       </div>
     </div>
 
@@ -4508,6 +4632,45 @@ async function loadInventory() {
   }
 }
 
+// ─── Add Workshop ─────────────────────────────────────────────────────────────
+
+async function addWorkshop() {
+  var name      = document.getElementById('ws-name').value.trim();
+  var price     = parseInt(document.getElementById('ws-price').value);
+  var component = parseInt(document.getElementById('ws-component').value);
+  var x         = parseFloat(document.getElementById('ws-x').value);
+  var y         = parseFloat(document.getElementById('ws-y').value);
+  var z         = parseFloat(document.getElementById('ws-z').value);
+
+  resetMsg('ws-err', 'ws-ok');
+  if (!name)                                            { showMsg('ws-err','Nama workshop wajib diisi'); return; }
+  if (name.length > 26)                                 { showMsg('ws-err','Nama maksimal 26 karakter'); return; }
+  if (isNaN(price) || price < 30000000 || price > 150000000)
+                                                        { showMsg('ws-err','Harga harus antara 30 juta - 150 juta'); return; }
+  if (isNaN(component) || component < 0 || component > 1000)
+                                                        { showMsg('ws-err','Component harus antara 0 - 1000'); return; }
+  if (isNaN(x) || isNaN(y) || isNaN(z))                { showMsg('ws-err','Koordinat X, Y, Z wajib diisi'); return; }
+
+  try {
+    var r = await fetch('/api/property/add-workshop', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: name, price: price, component: component, posx: x, posy: y, posz: z})
+    });
+    var d = await r.json();
+    if (!r.ok) { showMsg('ws-err', d.error || 'Gagal tambah workshop'); return; }
+    showMsg('ws-ok', 'Workshop berhasil ditambahkan! ID: ' + d.id + ' | ' + escHtml(d.name));
+    showToast('Workshop #' + d.id + ' berhasil dibuat!', 'success');
+    document.getElementById('ws-name').value      = '';
+    document.getElementById('ws-price').value     = '';
+    document.getElementById('ws-component').value = '';
+    document.getElementById('ws-x').value = '';
+    document.getElementById('ws-y').value = '';
+    document.getElementById('ws-z').value = '';
+    loadPropStats();
+  } catch(e) { showMsg('ws-err', 'Koneksi error'); }
+}
+
 // ─── Punishment ───────────────────────────────────────────────────────────────
 
 function switchPunTab(tab) {
@@ -4914,21 +5077,28 @@ function quickEditAdmin(name) {
 // ─── Add Property ─────────────────────────────────────────────────────────────
 
 function switchPropTab(tab) {
-  var bizzTab  = document.getElementById('prop-tab-bizz');
-  var houseTab = document.getElementById('prop-tab-house');
-  var bizzBtn  = document.getElementById('tab-bizz-btn');
-  var houseBtn = document.getElementById('tab-house-btn');
-  if (!bizzTab || !houseTab) return;
+  var bizzTab     = document.getElementById('prop-tab-bizz');
+  var houseTab    = document.getElementById('prop-tab-house');
+  var workshopTab = document.getElementById('prop-tab-workshop');
+  var bizzBtn     = document.getElementById('tab-bizz-btn');
+  var houseBtn    = document.getElementById('tab-house-btn');
+  var workshopBtn = document.getElementById('tab-workshop-btn');
+  if (!bizzTab || !houseTab || !workshopTab) return;
+  bizzTab.style.display     = 'none';
+  houseTab.style.display    = 'none';
+  workshopTab.style.display = 'none';
+  bizzBtn.className     = 'btn btn-copy btn-sm';
+  houseBtn.className    = 'btn btn-copy btn-sm';
+  workshopBtn.className = 'btn btn-copy btn-sm';
   if (tab === 'bizz') {
-    bizzTab.style.display  = 'block';
-    houseTab.style.display = 'none';
-    bizzBtn.className  = 'btn btn-primary btn-sm';
-    houseBtn.className = 'btn btn-copy btn-sm';
-  } else {
-    bizzTab.style.display  = 'none';
+    bizzTab.style.display = 'block';
+    bizzBtn.className = 'btn btn-primary btn-sm';
+  } else if (tab === 'house') {
     houseTab.style.display = 'block';
-    bizzBtn.className  = 'btn btn-copy btn-sm';
     houseBtn.className = 'btn btn-primary btn-sm';
+  } else {
+    workshopTab.style.display = 'block';
+    workshopBtn.className = 'btn btn-primary btn-sm';
   }
 }
 
@@ -4938,10 +5108,12 @@ async function loadPropStats() {
     if (!r.ok) return;
     var d = await r.json();
     var el = function(id) { return document.getElementById(id); };
-    if (el('stat-bizz-total'))  el('stat-bizz-total').textContent  = d.total_bizz || 0;
-    if (el('stat-bizz-owned'))  el('stat-bizz-owned').textContent  = (d.owned_bizz || 0) + ' dimiliki';
-    if (el('stat-house-total')) el('stat-house-total').textContent = d.total_house || 0;
-    if (el('stat-house-owned')) el('stat-house-owned').textContent = (d.owned_house || 0) + ' dimiliki';
+    if (el('stat-bizz-total'))     el('stat-bizz-total').textContent     = d.total_bizz || 0;
+    if (el('stat-bizz-owned'))     el('stat-bizz-owned').textContent     = (d.owned_bizz || 0) + ' dimiliki';
+    if (el('stat-house-total'))    el('stat-house-total').textContent    = d.total_house || 0;
+    if (el('stat-house-owned'))    el('stat-house-owned').textContent    = (d.owned_house || 0) + ' dimiliki';
+    if (el('stat-workshop-total')) el('stat-workshop-total').textContent = d.total_workshop || 0;
+    if (el('stat-workshop-owned')) el('stat-workshop-owned').textContent = (d.owned_workshop || 0) + ' dimiliki';
   } catch(e) {}
 }
 
@@ -5360,9 +5532,10 @@ func main() {
 	mux.HandleFunc("/api/get-veh-slots",  protected(handleGetVehSlots))
 	mux.HandleFunc("/api/admin-log",      protected(handleAdminLog))
 	mux.HandleFunc("/api/backup/export",     protected(handleBackupExport))
-	mux.HandleFunc("/api/property/add-bizz", protected(handleAddBizz))
-	mux.HandleFunc("/api/property/add-house",protected(handleAddHouse))
-	mux.HandleFunc("/api/property/stats",    protected(handleGetPropertyStats))
+	mux.HandleFunc("/api/property/add-bizz",    protected(handleAddBizz))
+	mux.HandleFunc("/api/property/add-house",   protected(handleAddHouse))
+	mux.HandleFunc("/api/property/add-workshop",protected(handleAddWorkshop))
+	mux.HandleFunc("/api/property/stats",       protected(handleGetPropertyStats))
 	mux.HandleFunc("/api/punishment/jail",      protected(handleOffJail))
 	mux.HandleFunc("/api/punishment/free",      protected(handleFreeJail))
 	mux.HandleFunc("/api/punishment/status",    protected(handleGetPrisonStatus))
