@@ -2366,11 +2366,11 @@ body::after{
   transition:opacity 1.2s ease;
   pointer-events:none;
 }
-#bg-video.show{opacity:0.18}
+#bg-video.show{opacity:0.55}
 #bg-overlay{
   position:fixed;
   inset:0;
-  background:linear-gradient(135deg,rgba(3,13,20,0.82),rgba(6,21,32,0.75));
+  background:linear-gradient(135deg,rgba(3,13,20,0.45),rgba(6,21,32,0.38));
   z-index:0;
   display:none;
   pointer-events:none;
