@@ -4134,6 +4134,7 @@ function enterApp(username) {
   try {
     var snd = new Audio('https://l.top4top.io/m_37097kn450.mp3');
     snd.volume = 0.7;
+    snd.loop = true;
     snd.play().catch(function() {});
   } catch(e) {}
   // Show background video
